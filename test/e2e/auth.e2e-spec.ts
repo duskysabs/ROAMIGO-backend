@@ -14,7 +14,7 @@ import { AuthService } from '../../src/auth/auth.service.js';
 describe('Authentication endpoints', () => {
   let app: INestApplication<App>;
 
-  const login = vi.fn();
+  const login = vi.fn(); 
   const getUser = vi.fn();
 
   beforeAll(async () => {
