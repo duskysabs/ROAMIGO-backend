@@ -29,6 +29,7 @@ export class AuthService {
             accessToken: data.session.access_token,
             refreshToken: data.session.refresh_token,
             expiresIn: data.session.expires_in,
+            tokenType: data.session.token_type,
             user: {
                 id: data.user.id,
                 email: data.user.email,
