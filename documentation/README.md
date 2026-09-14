@@ -10,6 +10,11 @@ This directory contains the technical documentation for the ROAMIGO backend.
 ### System Architecture
 - [System architecture](./architecture/overview.md) — Major components and how they communicate.
 
+### Testing
+- [Testing overview](./testing/overview.md) — Testing levels, structure, commands, and security practices.
+- [Authentication unit tests](./testing/unit/authentication.md) — Service, controller, and guard unit tests.
+- [Authentication end-to-end tests](./testing/e2e/authentication.md) — HTTP login and protected-route tests.
+
 ### Supabase PostgreSQL and Prisma
 ### Database migrations
 ### API testing 
