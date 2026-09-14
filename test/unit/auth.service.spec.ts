@@ -1,0 +1,141 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthService } from '../../src/auth/auth.service.js';
+import { SupabaseService } from '../../src/supabase/supabase.service.js';
+import { UnauthorizedException } from '@nestjs/common';
+
+describe('AuthService', () => {
+  let authService: AuthService;
+
+  const signInWithPassword = vi.fn();
+  const getUser = vi.fn();
+
+  const mockSupabaseService = {
+    createClient: vi.fn(() => ({
+      auth: {
+        signInWithPassword,
+        getUser,
+      },
+    })),
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        {
+          provide: SupabaseService,
+          useValue: mockSupabaseService,
+        },
+      ],
+    }).compile();
+
+    authService = module.get<AuthService>(AuthService);
+  });
+
+  it('returns tokens and user information when login succeeds', async () => {
+    // Arrange
+    signInWithPassword.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'fake-access-token',
+          refresh_token: 'fake-refresh-token',
+          expires_in: 3600,
+          token_type: 'bearer',
+        },
+        user: {
+          id: 'fake-user-id',
+          email: 'test@example.com',
+        },
+      },
+      error: null,
+    });
+
+    // Act
+    const result = await authService.login({
+      email: 'test@example.com',
+      password: 'test-password',
+    });
+
+    // Assert
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: 'test@example.com',
+      password: 'test-password',
+    });
+
+    expect(result).toEqual({
+      accessToken: 'fake-access-token',
+      refreshToken: 'fake-refresh-token',
+      expiresIn: 3600,
+      tokenType: 'bearer',
+      user: {
+        id: 'fake-user-id',
+        email: 'test@example.com',
+      },
+    });
+  });
+
+  it('throws UnauthorizedException when login fails', async () => {
+    // Arrange
+    signInWithPassword.mockResolvedValue({
+      data: {
+        session: null,
+        user: null,
+      },
+      error: {
+        message: 'Invalid login credentials',
+      },
+    });
+
+    // Act and assert
+    await expect(
+      authService.login({
+        email: 'test@example.com',
+        password: 'wrong-password',
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('returns user information when the access token is valid', async () => {
+    // Arrange
+    getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: 'fake-user-id',
+          email: 'test@example.com',
+        },
+      },
+      error: null,
+    });
+
+    // Act
+    const result = await authService.getUser('fake-access-token');
+
+    // Assert
+    expect(getUser).toHaveBeenCalledWith('fake-access-token');
+
+    expect(result).toEqual({
+      id: 'fake-user-id',
+      email: 'test@example.com',
+    });
+      });
+
+  it('throws UnauthorizedException when the access token is invalid', async () => {
+    // Arrange
+    getUser.mockResolvedValue({
+      data: {
+        user: null,
+      },
+      error: {
+        message: 'Invalid JWT',
+      },
+    });
+
+    // Act and assert
+    await expect(
+      authService.getUser('invalid-access-token'),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
