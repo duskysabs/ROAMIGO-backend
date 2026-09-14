@@ -5,9 +5,36 @@
 
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
 }
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+  STAFF
+  DRIVER
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model UserProfile {
+  userId        String        @id @db.Uuid @map("user_id")
+  firstName     String        @db.VarChar(100) @map("first_name")
+  lastName      String        @db.VarChar(100) @map("last_name")
+  birthDate     DateTime?     @db.Date @map("birth_date")
+  homeAddress   String?       @db.VarChar(255) @map("home_address")
+  role          UserRole
+  accountStatus AccountStatus @map("account_status")
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  @@map("user_profile")
+}
+
