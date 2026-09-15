@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from '../auth.service.js';
+import type { UserProfile } from '../../generated/prisma/client.js';
 
 /**
  * This guard is responsible for protecting routes that require authentication.
@@ -11,6 +12,7 @@ import { AuthService } from '../auth.service.js';
 type AuthenticatedUser = {
   id: string;
   email?: string;
+  profile?: UserProfile | null;  
 };
 
 export type AuthenticatedRequest = Request & { user?: AuthenticatedUser };

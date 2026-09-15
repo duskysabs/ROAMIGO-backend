@@ -5,6 +5,7 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { SupabaseModule } from './supabase/supabase.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { UserProfilesModule } from './user-profiles/user-profiles.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -22,6 +23,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
     AuthModule,
     SupabaseModule,
     PrismaModule,
+    UserProfilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
