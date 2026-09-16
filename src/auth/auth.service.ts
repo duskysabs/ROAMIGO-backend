@@ -1,7 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { UserProfilesService } from '../user-profiles/user-profiles.service.js';
+import { AccountStatus } from '../generated/prisma/enums.js'
 
 /**
  * Contains authentication-related business logic.
@@ -58,6 +59,14 @@ export class AuthService {
         }
 
         const profile = await this.userProfilesService.findByUserId(data.user.id);
+
+        if(!profile){
+            throw new ForbiddenException('User profile not found.');
+        }
+
+        if(profile.accountStatus !== AccountStatus.ACTIVE){
+            throw new ForbiddenException('Account is inactiive.');
+        }
 
         return {
             id: data.user.id,

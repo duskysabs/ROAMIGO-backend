@@ -12,7 +12,7 @@ import type { UserProfile } from '../../generated/prisma/client.js';
 type AuthenticatedUser = {
   id: string;
   email?: string;
-  profile?: UserProfile | null;  
+  profile: UserProfile;  
 };
 
 export type AuthenticatedRequest = Request & { user?: AuthenticatedUser };
