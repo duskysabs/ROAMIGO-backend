@@ -1,6 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import { LoginDto } from './dto/login.dto.js';
+import { UserProfilesService } from '../user-profiles/user-profiles.service.js';
+import { AccountStatus } from '../generated/prisma/enums.js'
 
 /**
  * Contains authentication-related business logic.
@@ -11,7 +13,10 @@ import { LoginDto } from './dto/login.dto.js';
 
 @Injectable()
 export class AuthService {
-    constructor(private readonly supabaseService: SupabaseService) {}
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly userProfilesService: UserProfilesService,
+    ) {}
 
     async login(LoginDto: LoginDto) {
         const supabase = this.supabaseService.createClient();
@@ -53,9 +58,20 @@ export class AuthService {
             throw new UnauthorizedException('Invalid or expired access token');
         }
 
+        const profile = await this.userProfilesService.findByUserId(data.user.id);
+
+        if(!profile){
+            throw new ForbiddenException('User profile not found.');
+        }
+
+        if(profile.accountStatus !== AccountStatus.ACTIVE){
+            throw new ForbiddenException('Account is inactiive.');
+        }
+
         return {
             id: data.user.id,
             email: data.user.email,
+            profile,
         }
     }
 }

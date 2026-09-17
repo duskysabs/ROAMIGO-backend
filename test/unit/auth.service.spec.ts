@@ -3,12 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service.js';
 import { SupabaseService } from '../../src/supabase/supabase.service.js';
 import { UnauthorizedException } from '@nestjs/common';
+import { UserProfilesService } from '../../src/user-profiles/user-profiles.service.js';
 
 describe('AuthService', () => {
   let authService: AuthService;
 
   const signInWithPassword = vi.fn();
   const getUser = vi.fn();
+  const findByUserId = vi.fn();
+
+  const mockUserProfilesService = {
+    findByUserId,
+  };
 
   const mockSupabaseService = {
     createClient: vi.fn(() => ({
@@ -28,6 +34,10 @@ describe('AuthService', () => {
         {
           provide: SupabaseService,
           useValue: mockSupabaseService,
+        },
+        {
+          provide: UserProfilesService,
+          useValue: mockUserProfilesService,
         },
       ],
     }).compile();
@@ -110,17 +120,33 @@ describe('AuthService', () => {
       error: null,
     });
 
+    const mockProfile = {
+      userId: 'fake-user-id',
+      firstName: 'Test',
+      lastName: 'User',
+      birthDate: null,
+      homeAddress: null,
+      role: 'CUSTOMER',
+      accountStatus: 'ACTIVE',
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-01'),
+    };
+
+    findByUserId.mockResolvedValue(mockProfile);
+
     // Act
     const result = await authService.getUser('fake-access-token');
 
     // Assert
     expect(getUser).toHaveBeenCalledWith('fake-access-token');
+    expect(findByUserId).toHaveBeenCalledWith('fake-user-id');
 
     expect(result).toEqual({
       id: 'fake-user-id',
       email: 'test@example.com',
+      profile: mockProfile,
     });
-      });
+  });
 
   it('throws UnauthorizedException when the access token is invalid', async () => {
     // Arrange
