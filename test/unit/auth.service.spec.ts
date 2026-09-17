@@ -2,13 +2,14 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../src/auth/auth.service.js';
 import { SupabaseService } from '../../src/supabase/supabase.service.js';
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { UserProfilesService } from '../../src/user-profiles/user-profiles.service.js';
 
 describe('AuthService', () => {
   let authService: AuthService;
 
   const signInWithPassword = vi.fn();
+  const signOut = vi.fn();
   const getUser = vi.fn();
   const findByUserId = vi.fn();
 
@@ -20,6 +21,7 @@ describe('AuthService', () => {
     createClient: vi.fn(() => ({
       auth: {
         signInWithPassword,
+        signOut,
         getUser,
       },
     })),
@@ -62,6 +64,10 @@ describe('AuthService', () => {
       },
       error: null,
     });
+    findByUserId.mockResolvedValue({
+      userId: 'fake-user-id',
+      accountStatus: 'ACTIVE',
+    });
 
     // Act
     const result = await authService.login({
@@ -74,6 +80,8 @@ describe('AuthService', () => {
       email: 'test@example.com',
       password: 'test-password',
     });
+    expect(findByUserId).toHaveBeenCalledWith('fake-user-id');
+    expect(signOut).not.toHaveBeenCalled();
 
     expect(result).toEqual({
       accessToken: 'fake-access-token',
@@ -106,6 +114,67 @@ describe('AuthService', () => {
         password: 'wrong-password',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(findByUserId).not.toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it('signs out and rejects login when the user profile is missing', async () => {
+    signInWithPassword.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'fake-access-token',
+          refresh_token: 'fake-refresh-token',
+        },
+        user: {
+          id: 'fake-user-id',
+          email: 'test@example.com',
+        },
+      },
+      error: null,
+    });
+    findByUserId.mockResolvedValue(null);
+    signOut.mockResolvedValue({ error: null });
+
+    await expect(
+      authService.login({
+        email: 'test@example.com',
+        password: 'test-password',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(findByUserId).toHaveBeenCalledWith('fake-user-id');
+    expect(signOut).toHaveBeenCalledOnce();
+  });
+
+  it('signs out and rejects login when the account is inactive', async () => {
+    signInWithPassword.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'fake-access-token',
+          refresh_token: 'fake-refresh-token',
+        },
+        user: {
+          id: 'fake-user-id',
+          email: 'test@example.com',
+        },
+      },
+      error: null,
+    });
+    findByUserId.mockResolvedValue({
+      userId: 'fake-user-id',
+      accountStatus: 'INACTIVE',
+    });
+    signOut.mockResolvedValue({ error: null });
+
+    await expect(
+      authService.login({
+        email: 'test@example.com',
+        password: 'test-password',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(findByUserId).toHaveBeenCalledWith('fake-user-id');
+    expect(signOut).toHaveBeenCalledOnce();
   });
 
   it('returns user information when the access token is valid', async () => {

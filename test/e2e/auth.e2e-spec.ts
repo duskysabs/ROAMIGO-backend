@@ -1,5 +1,6 @@
 import {
   type INestApplication,
+  ForbiddenException,
   HttpStatus,
   UnauthorizedException,
   ValidationPipe,
@@ -7,14 +8,22 @@ import {
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { AuthService } from '../../src/auth/auth.service.js';
 
 describe('Authentication endpoints', () => {
   let app: INestApplication<App>;
 
-  const login = vi.fn(); 
+  const login = vi.fn();
   const getUser = vi.fn();
 
   beforeAll(async () => {
@@ -98,6 +107,30 @@ describe('Authentication endpoints', () => {
         password: 'wrong-password',
       })
       .expect(HttpStatus.UNAUTHORIZED);
+  });
+
+  it('POST /auth/login returns 403 when the application account is inactive', async () => {
+    login.mockRejectedValue(new ForbiddenException('Account is inactive.'));
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email: 'test@example.com',
+        password: 'correct-password',
+      })
+      .expect(HttpStatus.FORBIDDEN);
+  });
+
+  it('POST /auth/login returns 403 when the user profile is missing', async () => {
+    login.mockRejectedValue(new ForbiddenException('User profile not found.'));
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email: 'test@example.com',
+        password: 'correct-password',
+      })
+      .expect(HttpStatus.FORBIDDEN);
   });
 
   it('GET /auth/me rejects a request without a token', async () => {

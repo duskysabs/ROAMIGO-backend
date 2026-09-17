@@ -10,31 +10,32 @@ import {
 } from '@nestjs/common';
 import type { AuthenticatedRequest } from './guards/supabase-auth.guard.js';
 import { SupabaseAuthGuard } from './guards/supabase-auth.guard.js';
+import { LoginRateLimitGuard } from './guards/login-rate-limit.guard.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 
 /**
  * Defines authentication HTTP endpoints.
- * 
+ *
  * All routes in this controller begin with /auth
  */
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) {}
 
-    @Post('login')
-    @HttpCode(HttpStatus.OK)
-    login(@Body() loginDto: LoginDto) {
-        return this.authService.login(loginDto);
-    }
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(LoginRateLimitGuard)
+  login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
+  }
 
-    @Get('me')
-    @UseGuards(SupabaseAuthGuard)
-    getCurrentUser(@Req() request: AuthenticatedRequest) {
-        return {
-            user: request.user,
-        };
-    }
+  @Get('me')
+  @UseGuards(SupabaseAuthGuard)
+  getCurrentUser(@Req() request: AuthenticatedRequest) {
+    return {
+      user: request.user,
+    };
+  }
 }
-

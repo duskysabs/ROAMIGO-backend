@@ -1,0 +1,4 @@
+export const LOGIN_RATE_LIMIT = 5;
+export const LOGIN_RATE_TTL_MS = 60_000;
+export const LOGIN_RATE_BLOCK_DURATION_MS = 60_000;
+export const LOGIN_RATE_MAX_TRACKED_CLIENTS = 10_000;

@@ -48,6 +48,8 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+*.db-shm
+*.db-wal
 
 # Runtime data
 pids

@@ -2,6 +2,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthController } from '../../src/auth/auth.controller.js';
 import { AuthService } from '../../src/auth/auth.service.js';
+import { LoginRateLimitGuard } from '../../src/auth/guards/login-rate-limit.guard.js';
 import type { AuthenticatedRequest } from '../../src/auth/guards/supabase-auth.guard.js';
 
 describe('AuthController', () => {
@@ -22,7 +23,10 @@ describe('AuthController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(LoginRateLimitGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     authController = module.get<AuthController>(AuthController);
   });
