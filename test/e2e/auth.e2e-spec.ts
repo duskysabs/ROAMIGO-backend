@@ -6,13 +6,12 @@ import {
 } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
-import type { App } from 'supertest/types';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
 import { AuthService } from '../../src/auth/auth.service.js';
 
 describe('Authentication endpoints', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication;
 
   const login = vi.fn(); 
   const getUser = vi.fn();
