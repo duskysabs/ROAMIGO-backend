@@ -24,6 +24,186 @@ enum AccountStatus {
   INACTIVE
 }
 
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum DriverStatus {
+  AVAILABLE
+  RESERVED
+  ASSIGNED
+  IN_TRIP
+  UNAVAILABLE
+  TURNAROUND
+  INACTIVE
+}
+
+enum VehicleTypeName {
+  SEDAN
+  SUV
+  VAN
+  MINIBUS
+  BUS
+}
+
+enum FuelType {
+  GASOLINE
+  DIESEL
+  ELECTRIC
+  HYBRID
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  RESERVED
+  ASSIGNED
+  IN_TRIP
+  UNAVAILABLE
+  TURNAROUND
+  MAINTENANCE
+  INACTIVE
+}
+
+enum PackageStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StopType {
+  PICKUP
+  INTERMEDIATE
+  DROPOFF
+}
+
+enum BookingType {
+  TOUR_PACKAGE
+  CUSTOM_TRIP
+}
+
+enum BookingStatus {
+  DRAFT
+  SUBMITTED
+  VALIDATED
+  AWAITING_PAYMENT
+  BOOKING_REVIEW
+  CONFIRMED
+  DISPATCHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum AssignmentStatus {
+  PROPOSED
+  RESERVED
+  ASSIGNED
+  ACKNOWLEDGED
+  DECLINED
+  RELEASED
+  REPLACED
+  COMPLETED
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  INSPECTION
+  CLEANING
+  REFUELING
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentChannel {
+  ONLINE
+  MANUAL
+}
+
+enum PaymentMethod {
+  CARD
+  E_WALLET
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum ReceivableStatus {
+  OPEN
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+enum CancellationCategory {
+  CUSTOMER_REQUEST
+  RESOURCE_UNAVAILABLE
+  PAYMENT_DEADLINE
+  OPERATIONAL
+  OTHER
+}
+
+enum CancellationStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum RefundType {
+  FULL
+  PARTIAL
+}
+
+enum RefundMethod {
+  ORIGINAL_METHOD
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  REFUNDED
+  REJECTED
+}
+
+enum TravelSlipStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  BOOKING
+  PAYMENT
+  ASSIGNMENT
+  CANCELLATION
+  REFUND
+  TRIP
+  SYSTEM
+}
+
 model UserProfile {
   userId        String        @id @db.Uuid @map("user_id")
   firstName     String        @db.VarChar(100) @map("first_name")
@@ -35,6 +215,421 @@ model UserProfile {
   createdAt     DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
   updatedAt     DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
 
+  customer      Customer?
+  staff         Staff?
+  bookings      Booking[]     @relation("CustomerBookings")
+  cancellations BookingCancellation[] @relation("CancellationRequester")
+  notifications Notification[]
+
   @@map("user_profile")
+}
+
+model Customer {
+  id        String      @id @default(uuid()) @db.Uuid @map("customer_id")
+  userId    String      @unique @db.Uuid @map("user_id")
+  hasCredit Boolean     @default(false) @map("has_credit")
+
+  user      UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@map("customer")
+}
+
+model Staff {
+  id               String           @id @default(uuid()) @db.Uuid @map("staff_id")
+  userId           String           @unique @db.Uuid @map("user_id")
+  employmentStatus EmploymentStatus @map("employment_status")
+
+  user             UserProfile      @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  driver           Driver?
+  createdPackages  TourPackage[]    @relation("PackageCreator")
+  recordedPayments Payment[]        @relation("PaymentRecorder")
+  recordedMaintenance MaintenanceRecord[] @relation("MaintenanceRecorder")
+  recordedOutsourcing OutsourcedDetails[] @relation("OutsourcingRecorder")
+  reviewedCancellations BookingCancellation[] @relation("CancellationReviewer")
+  processedRefunds Refund[]         @relation("RefundProcessor")
+
+  @@map("staff")
+}
+
+model Driver {
+  id            String       @id @default(uuid()) @db.Uuid @map("driver_id")
+  staffId       String       @unique @db.Uuid @map("staff_id")
+  licenseNumber String       @db.VarChar(100) @map("license_number")
+  licenseExpiry DateTime     @db.Date @map("license_expiry")
+  driverStatus  DriverStatus @map("driver_status")
+
+  staff         Staff        @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  vehicle       Vehicle?     @relation("AssignedDriverVehicle")
+  assignments   BookingAssignment[]
+  addedStops    BookingStop[] @relation("AddedStopDriver")
+
+  @@map("driver")
+}
+
+model VehicleType {
+  id                    String          @id @default(uuid()) @db.Uuid @map("vehicle_type_id")
+  vehicleType           VehicleTypeName @unique @map("vehicle_type")
+
+  vehicles              Vehicle[]
+  bookings              Booking[]
+  pricingConfigurations PricingConfiguration[]
+  outsourcedDetails     OutsourcedDetails[]
+
+  @@map("vehicle_type")
+}
+
+model Vehicle {
+  id               String        @id @default(uuid()) @db.Uuid @map("vehicle_id")
+  assignedDriverId String?       @unique @db.Uuid @map("assigned_driver_id")
+  vehicleTypeId    String        @db.Uuid @map("vehicle_type_id")
+  plateNumber      String        @unique @db.VarChar(30) @map("plate_number")
+  fuelType         FuelType      @map("fuel_type")
+  fuelEfficiency   Decimal       @db.Decimal(10, 2) @map("fuel_efficiency")
+  vehicleModel     String        @db.VarChar(150) @map("vehicle_model")
+  passengerCapacity Int           @map("passenger_capacity")
+  yearModel        Int           @map("year_model")
+  color            String        @db.VarChar(80)
+  vehicleStatus    VehicleStatus @map("vehicle_status")
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
+  isDeleted        Boolean       @default(false) @map("is_deleted")
+
+  assignedDriver   Driver?       @relation("AssignedDriverVehicle", fields: [assignedDriverId], references: [id], onDelete: SetNull)
+  vehicleType      VehicleType   @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  assignments      BookingAssignment[]
+  maintenanceRecords MaintenanceRecord[]
+
+  @@map("vehicle")
+}
+
+model TourPackage {
+  id                       String        @id @default(uuid()) @db.Uuid @map("tour_package_id")
+  packageName              String        @db.VarChar(150) @map("package_name")
+  description              String        @db.Text
+  basePrice                Decimal       @db.Decimal(12, 2) @map("base_price")
+  estimatedDurationMinutes Int           @map("estimated_duration_minutes")
+  packageStatus            PackageStatus @map("package_status")
+  createdByAdminId         String        @db.Uuid @map("created_by_admin_id")
+  createdAt                DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt                DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  createdByAdmin           Staff         @relation("PackageCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  stops                    PackageStop[]
+  bookings                 Booking[]
+
+  @@map("tour_package")
+}
+
+model PackageStop {
+  id                 String   @id @default(uuid()) @db.Uuid @map("package_stop_id")
+  tourPackageId      String   @db.Uuid @map("tour_package_id")
+  sequenceNumber     Int      @map("sequence_number")
+  stopType           StopType @map("stop_type")
+  locationName       String   @db.VarChar(150) @map("location_name")
+  activity           String   @db.VarChar(255)
+  formattedAddress   String   @db.VarChar(255) @map("formatted_address")
+  latitude           Decimal  @db.Decimal(9, 6)
+  longitude          Decimal  @db.Decimal(9, 6)
+  defaultStopMinutes Int      @map("default_stop_minutes")
+
+  tourPackage        TourPackage @relation(fields: [tourPackageId], references: [id], onDelete: Cascade)
+
+  @@unique([tourPackageId, sequenceNumber])
+  @@map("package_stop")
+}
+
+model Booking {
+  id                       String        @id @default(uuid()) @db.Uuid @map("booking_id")
+  customerUserId           String        @db.Uuid @map("customer_user_id")
+  tourPackageId            String?       @db.Uuid @map("tour_package_id")
+  vehicleTypeId            String        @db.Uuid @map("vehicle_type_id")
+  bookingType              BookingType   @map("booking_type")
+  startDatetime            DateTime      @map("start_datetime") @db.Timestamptz(3)
+  endDatetime              DateTime      @map("end_datetime") @db.Timestamptz(3)
+  passengerCount           Int           @map("passenger_count")
+  bookingStatus            BookingStatus @map("booking_status")
+  totalDistanceKm          Decimal       @db.Decimal(12, 2) @map("total_distance_km")
+  estimatedDurationMinutes Int           @map("estimated_duration_minutes")
+  finalQuotedPrice         Decimal       @db.Decimal(12, 2) @map("final_quoted_price")
+  notes                    String?       @db.Text
+  createdAt                DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt                DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  customer                 UserProfile   @relation("CustomerBookings", fields: [customerUserId], references: [userId], onDelete: Restrict)
+  tourPackage              TourPackage?  @relation(fields: [tourPackageId], references: [id], onDelete: Restrict)
+  vehicleType              VehicleType   @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  stops                    BookingStop[]
+  assignments              BookingAssignment[]
+  pricingCalculations      PricingCalculation[]
+  payments                 Payment[]
+  receivable               AccountsReceivable?
+  cancellation             BookingCancellation?
+  outsourcedDetails        OutsourcedDetails?
+
+  @@index([customerUserId, createdAt])
+  @@index([bookingStatus, startDatetime])
+  @@map("booking")
+}
+
+model BookingStop {
+  id                    String   @id @default(uuid()) @db.Uuid @map("booking_stop_id")
+  bookingId             String   @db.Uuid @map("booking_id")
+  sequenceNumber        Int      @map("sequence_number")
+  stopType              StopType @map("stop_type")
+  locationName          String   @db.VarChar(150) @map("location_name")
+  formattedAddress      String   @db.VarChar(255) @map("formatted_address")
+  latitude              Decimal  @db.Decimal(9, 6)
+  longitude             Decimal  @db.Decimal(9, 6)
+  activity              String?  @db.VarChar(255)
+  plannedStopMinutes    Int?     @map("planned_stop_minutes")
+  additionalDistanceKm  Decimal? @db.Decimal(12, 2) @map("additional_distance_km")
+  additionalCharge      Decimal? @db.Decimal(12, 2) @map("additional_charge")
+  addedByDriverId       String?  @db.Uuid @map("added_by_driver_id")
+  addedAt               DateTime @default(now()) @db.Timestamptz(3) @map("added_at")
+
+  booking               Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addedByDriver         Driver?  @relation("AddedStopDriver", fields: [addedByDriverId], references: [id], onDelete: SetNull)
+
+  @@unique([bookingId, sequenceNumber])
+  @@map("booking_stop")
+}
+
+model BookingAssignment {
+  id               String           @id @default(uuid()) @db.Uuid @map("booking_assignment_id")
+  vehicleId        String           @db.Uuid @map("vehicle_id")
+  driverId         String           @db.Uuid @map("driver_id")
+  bookingId        String           @unique @db.Uuid @map("booking_id")
+  assignmentStatus AssignmentStatus @map("assignment_status")
+  assignedAt       DateTime         @default(now()) @db.Timestamptz(3) @map("assigned_at")
+
+  vehicle          Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver           Driver           @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  booking          Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  travelSlip       TravelSlip?
+
+  @@map("booking_assignment")
+}
+
+model PricingConfiguration {
+  id                   String      @id @default(uuid()) @db.Uuid @map("pricing_config_id")
+  vehicleTypeId        String      @db.Uuid @map("vehicle_type_id")
+  baseRate             Decimal     @db.Decimal(12, 2) @map("base_rate")
+  minAdjustmentPct     Decimal     @db.Decimal(6, 2) @map("min_adjustment_pct")
+  maxAdjustmentPct     Decimal     @db.Decimal(6, 2) @map("max_adjustment_pct")
+  isActive             Boolean     @default(true) @map("is_active")
+  updatedByAdminId     String      @db.Uuid @map("updated_by_admin_id")
+  effectiveFrom        DateTime    @map("effective_from") @db.Timestamptz(3)
+  effectiveUntil       DateTime?   @map("effective_until") @db.Timestamptz(3)
+  updatedAt            DateTime    @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  vehicleType          VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  pricingCalculations  PricingCalculation[]
+
+  @@map("pricing_configuration")
+}
+
+model FuelPriceRecord {
+  id            String    @id @default(uuid()) @db.Uuid @map("fuel_price_id")
+  fuelType      FuelType  @map("fuel_type")
+  pricePerLiter Decimal   @db.Decimal(12, 2) @map("price_per_liter")
+  observedDate  DateTime  @db.Date @map("observed_date")
+  sourceName    String    @db.VarChar(150) @map("source_name")
+  recordedAt    DateTime  @default(now()) @db.Timestamptz(3) @map("recorded_at")
+
+  pricingCalculations PricingCalculation[]
+
+  @@map("fuel_price_record")
+}
+
+model PricingCalculation {
+  id                   String                @id @default(uuid()) @db.Uuid @map("pricing_calculation_id")
+  bookingId            String                @db.Uuid @map("booking_id")
+  pricingConfigId      String                @db.Uuid @map("pricing_config_id")
+  fuelPriceRecordId    String?               @db.Uuid @map("fuel_price_record_id")
+  baseRateUsed         Decimal               @db.Decimal(12, 2) @map("base_rate_used")
+  fuelPriceUsed        Decimal?              @db.Decimal(12, 2) @map("fuel_price_used")
+  distanceKm           Decimal               @db.Decimal(12, 2) @map("distance_km")
+  tripDurationMinutes  Int                   @map("trip_duration_minutes")
+  bookingDemandCount   Int                   @map("booking_demand_count")
+  vehicleAvailability  Int                   @map("vehicle_availability")
+  driverAvailability   Int                   @map("driver_availability")
+  suggestedAmount      Decimal               @db.Decimal(12, 2) @map("suggested_amount")
+  adjustmentPercentage Decimal               @db.Decimal(6, 2) @map("adjustment_percentage")
+  modelVersion         String                @db.VarChar(100) @map("model_version")
+  calculatedAt         DateTime              @default(now()) @db.Timestamptz(3) @map("calculated_at")
+
+  booking              Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  pricingConfiguration PricingConfiguration  @relation(fields: [pricingConfigId], references: [id], onDelete: Restrict)
+  fuelPriceRecord      FuelPriceRecord?      @relation(fields: [fuelPriceRecordId], references: [id], onDelete: SetNull)
+
+  @@map("pricing_calculation")
+}
+
+model Payment {
+  id                String         @id @default(uuid()) @db.Uuid @map("payment_id")
+  bookingId         String         @db.Uuid @map("booking_id")
+  recordedByStaffId String?        @db.Uuid @map("recorded_by_staff_id")
+  paymentChannel    PaymentChannel @map("payment_channel")
+  paymentMethod     PaymentMethod  @map("payment_method")
+  provider          String?        @db.VarChar(100)
+  providerReference String?        @db.VarChar(255) @map("provider_reference")
+  amount            Decimal        @db.Decimal(12, 2)
+  currency          String         @default("PHP") @db.VarChar(3)
+  paymentStatus     PaymentStatus  @map("payment_status")
+  paidAt            DateTime?      @db.Timestamptz(3) @map("paid_at")
+  failedAt          DateTime?      @db.Timestamptz(3) @map("failed_at")
+  expiredAt         DateTime?      @db.Timestamptz(3) @map("expired_at")
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt         DateTime       @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  booking           Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  recordedByStaff   Staff?         @relation("PaymentRecorder", fields: [recordedByStaffId], references: [id], onDelete: SetNull)
+  proofs            PaymentProof[]
+  refunds           Refund[]
+
+  @@index([bookingId, paymentStatus])
+  @@unique([provider, providerReference])
+  @@map("payment")
+}
+
+model PaymentProof {
+  id          String   @id @default(uuid()) @db.Uuid @map("payment_proof_id")
+  paymentId   String   @db.Uuid @map("payment_id")
+  fileUrl     String   @db.Text @map("file_url")
+  submittedAt DateTime @default(now()) @db.Timestamptz(3) @map("submitted_at")
+  remarks     String?  @db.Text
+
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("payment_proof")
+}
+
+model AccountsReceivable {
+  id                 String           @id @default(uuid()) @db.Uuid @map("receivable_id")
+  bookingId          String           @unique @db.Uuid @map("booking_id")
+  amountDue          Decimal          @db.Decimal(12, 2) @map("amount_due")
+  amountPaid         Decimal          @default(0) @db.Decimal(12, 2) @map("amount_paid")
+  outstandingBalance Decimal          @db.Decimal(12, 2) @map("outstanding_balance")
+  dueDate            DateTime         @db.Date @map("due_date")
+  receivableStatus   ReceivableStatus @map("receivable_status")
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  booking            Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("accounts_receivable")
+}
+
+model BookingCancellation {
+  id                    String               @id @default(uuid()) @db.Uuid @map("cancellation_id")
+  bookingId             String               @unique @db.Uuid @map("booking_id")
+  requestedByUserId     String               @db.Uuid @map("requested_by_user_id")
+  reviewedByStaffId     String?              @db.Uuid @map("reviewed_by_staff_id")
+  cancellationReason    String               @db.Text @map("cancellation_reason")
+  cancellationCategory  CancellationCategory @map("cancellation_category")
+  cancellationStatus    CancellationStatus   @map("cancellation_status")
+  isLateCancellation    Boolean              @default(false) @map("is_late_cancellation")
+  penaltyRate            Decimal              @db.Decimal(6, 2) @map("penalty_rate")
+  penaltyAmount          Decimal              @db.Decimal(12, 2) @map("penalty_amount")
+  requestedAt            DateTime             @default(now()) @db.Timestamptz(3) @map("requested_at")
+  reviewedAt             DateTime?            @db.Timestamptz(3) @map("reviewed_at")
+  reviewNotes            String?              @db.Text @map("review_notes")
+
+  booking               Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  requestedBy           UserProfile           @relation("CancellationRequester", fields: [requestedByUserId], references: [userId], onDelete: Restrict)
+  reviewedByStaff       Staff?                @relation("CancellationReviewer", fields: [reviewedByStaffId], references: [id], onDelete: SetNull)
+
+  @@map("booking_cancellation")
+}
+
+model Refund {
+  id                 String       @id @default(uuid()) @db.Uuid @map("refund_id")
+  paymentId          String       @db.Uuid @map("payment_id")
+  processedByStaffId String?      @db.Uuid @map("processed_by_staff_id")
+  refundType         RefundType   @map("refund_type")
+  refundAmount       Decimal      @db.Decimal(12, 2) @map("refund_amount")
+  refundReason       String       @db.Text @map("refund_reason")
+  refundMethod       RefundMethod @map("refund_method")
+  refundStatus       RefundStatus @map("refund_status")
+  refundReference    String?      @db.VarChar(255) @map("refund_reference")
+  requestedAt        DateTime     @default(now()) @db.Timestamptz(3) @map("requested_at")
+  processedAt        DateTime?    @db.Timestamptz(3) @map("processed_at")
+  remarks            String?      @db.Text
+
+  payment            Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  processedByStaff   Staff?       @relation("RefundProcessor", fields: [processedByStaffId], references: [id], onDelete: SetNull)
+
+  @@map("refund")
+}
+
+model OutsourcedDetails {
+  id                String      @id @default(uuid()) @db.Uuid @map("outsourced_details_id")
+  bookingId         String      @unique @db.Uuid @map("booking_id")
+  vehicleTypeId     String      @db.Uuid @map("vehicle_type_id")
+  vehicleModel      String      @db.VarChar(150) @map("vehicle_model")
+  plateNumber       String      @db.VarChar(30) @map("plate_number")
+  vehicleProvider   String      @db.VarChar(150) @map("vehicle_provider")
+  driverName        String      @db.VarChar(150) @map("driver_name")
+  driverContact     String      @db.VarChar(100) @map("driver_contact")
+  agreedCost        Decimal     @db.Decimal(12, 2) @map("agreed_cost")
+  recordedByStaffId String      @db.Uuid @map("recorded_by_staff_id")
+  recordedAt        DateTime    @default(now()) @db.Timestamptz(3) @map("recorded_at")
+
+  booking           Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  vehicleType       VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  recordedByStaff   Staff       @relation("OutsourcingRecorder", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@map("outsourced_details")
+}
+
+model MaintenanceRecord {
+  id                String            @id @default(uuid()) @db.Uuid @map("maintenance_id")
+  vehicleId         String            @db.Uuid @map("vehicle_id")
+  maintenanceType   MaintenanceType   @map("maintenance_type")
+  description       String            @db.Text
+  scheduledDate     DateTime          @db.Date @map("scheduled_date")
+  completedDate     DateTime?         @db.Date @map("completed_date")
+  cost              Decimal           @db.Decimal(12, 2)
+  odometerReading   Int               @map("odometer_reading")
+  maintenanceStatus MaintenanceStatus @map("maintenance_status")
+  recordedByStaffId String            @db.Uuid @map("recorded_by_staff_id")
+
+  vehicle           Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  recordedByStaff   Staff             @relation("MaintenanceRecorder", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
+
+  @@map("maintenance_record")
+}
+
+model TravelSlip {
+  id                  String           @id @default(uuid()) @db.Uuid @map("travel_slip_id")
+  bookingAssignmentId String           @unique @db.Uuid @map("booking_assignment_id")
+  actualTripStartAt   DateTime?        @db.Timestamptz(3) @map("actual_trip_start_at")
+  actualTripEndAt     DateTime?        @db.Timestamptz(3) @map("actual_trip_end_at")
+  travelSlipStatus    TravelSlipStatus @map("travel_slip_status")
+  remarks             String?          @db.Text
+  updatedAt           DateTime         @updatedAt @db.Timestamptz(3) @map("updated_at")
+  createdAt           DateTime         @default(now()) @db.Timestamptz(3) @map("created_at")
+  completedAt         DateTime?        @db.Timestamptz(3) @map("completed_at")
+
+  bookingAssignment   BookingAssignment @relation(fields: [bookingAssignmentId], references: [id], onDelete: Cascade)
+
+  @@map("travel_slip")
+}
+
+model Notification {
+  id              String           @id @default(uuid()) @db.Uuid @map("notification_id")
+  recipientUserId String           @db.Uuid @map("recipient_user_id")
+  notificationType NotificationType @map("notification_type")
+  title           String           @db.VarChar(150)
+  message         String           @db.Text
+  actionUrl       String?          @db.Text @map("action_url")
+  isRead          Boolean          @default(false) @map("is_read")
+  readAt          DateTime?        @db.Timestamptz(3) @map("read_at")
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3) @map("created_at")
+  expiresAt       DateTime?        @db.Timestamptz(3) @map("expires_at")
+
+  recipient       UserProfile      @relation(fields: [recipientUserId], references: [userId], onDelete: Cascade)
+
+  @@map("notification")
 }
 
