@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service.js';
 import { LoginDto } from './dto/login.dto.js';
+import { SignUpDto } from './dto/signup.dto.js';
 import { UserProfilesService } from '../user-profiles/user-profiles.service.js';
 import { AccountStatus } from '../generated/prisma/enums.js';
 
@@ -22,6 +24,35 @@ export class AuthService {
     private readonly userProfilesService: UserProfilesService,
   ) {}
 
+  async signUp(signUpDto: SignUpDto) {
+    const supabase = this.supabaseService.createClient();
+
+    const { data, error } = await supabase.auth.signUp({
+      email: signUpDto.email,
+      password: signUpDto.password,
+    });
+
+    if (error || !data.user) {
+      throw new BadRequestException('Unable to create account');
+    }
+
+    const session = data.session;
+
+    return {
+      accessToken: session?.access_token ?? null,
+      refreshToken: session?.refresh_token ?? null,
+      expiresIn: session?.expires_in ?? null,
+      tokenType: session?.token_type ?? null,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+      },
+      requiresEmailConfirmation: !session,
+      requiresProfile: true,
+      nextStep: session ? 'COMPLETE_PROFILE' : 'CONFIRM_EMAIL',
+    };
+  }
+
   async login(loginDto: LoginDto) {
     const supabase = this.supabaseService.createClient();
 
@@ -37,8 +68,18 @@ export class AuthService {
     const profile = await this.userProfilesService.findByUserId(data.user.id);
 
     if (!profile) {
-      await supabase.auth.signOut();
-      throw new ForbiddenException('User profile not found.');
+      return {
+        accessToken: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        expiresIn: data.session.expires_in,
+        tokenType: data.session.token_type,
+        user: {
+          id: data.user.id,
+          email: data.user.email,
+        },
+        requiresProfile: true,
+        nextStep: 'COMPLETE_PROFILE',
+      };
     }
 
     if (profile.accountStatus !== AccountStatus.ACTIVE) {
@@ -55,6 +96,8 @@ export class AuthService {
         id: data.user.id,
         email: data.user.email,
       },
+      requiresProfile: false,
+      nextStep: 'APPLICATION',
     };
   }
 
@@ -65,7 +108,7 @@ export class AuthService {
    * @throws UnauthorizedException if the token is invalid or expired.
    */
 
-  async getUser(accessToken: string) {
+  async verifyAccessToken(accessToken: string) {
     const supabase = this.supabaseService.createClient();
 
     const { data, error } = await supabase.auth.getUser(accessToken);
@@ -74,7 +117,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired access token');
     }
 
-    const profile = await this.userProfilesService.findByUserId(data.user.id);
+    return {
+      id: data.user.id,
+      email: data.user.email,
+    };
+  }
+
+  async getUser(accessToken: string) {
+    const user = await this.verifyAccessToken(accessToken);
+    const profile = await this.userProfilesService.findByUserId(user.id);
 
     if (!profile) {
       throw new ForbiddenException('User profile not found.');
@@ -85,8 +136,7 @@ export class AuthService {
     }
 
     return {
-      id: data.user.id,
-      email: data.user.email,
+      ...user,
       profile,
     };
   }
