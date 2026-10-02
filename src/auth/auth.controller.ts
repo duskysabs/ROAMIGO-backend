@@ -13,6 +13,7 @@ import { SupabaseAuthGuard } from './guards/supabase-auth.guard.js';
 import { LoginRateLimitGuard } from './guards/login-rate-limit.guard.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
+import { SignUpDto } from './dto/signup.dto.js';
 
 /**
  * Defines authentication HTTP endpoints.
@@ -23,6 +24,13 @@ import { LoginDto } from './dto/login.dto.js';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('signup')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(LoginRateLimitGuard)
+  signUp(@Body() signUpDto: SignUpDto) {
+    return this.authService.signUp(signUpDto);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
