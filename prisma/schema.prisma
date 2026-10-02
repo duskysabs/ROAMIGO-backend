@@ -10,6 +10,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  schemas  = ["public", "auth"]
 }
 
 enum UserRole {
@@ -17,17 +18,23 @@ enum UserRole {
   CUSTOMER
   STAFF
   DRIVER
+
+  @@schema("public")
 }
 
 enum AccountStatus {
   ACTIVE
   INACTIVE
+
+  @@schema("public")
 }
 
 enum EmploymentStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+
+  @@schema("public")
 }
 
 enum DriverStatus {
@@ -38,6 +45,8 @@ enum DriverStatus {
   UNAVAILABLE
   TURNAROUND
   INACTIVE
+
+  @@schema("public")
 }
 
 enum VehicleTypeName {
@@ -46,6 +55,8 @@ enum VehicleTypeName {
   VAN
   MINIBUS
   BUS
+
+  @@schema("public")
 }
 
 enum FuelType {
@@ -53,6 +64,8 @@ enum FuelType {
   DIESEL
   ELECTRIC
   HYBRID
+
+  @@schema("public")
 }
 
 enum VehicleStatus {
@@ -64,22 +77,30 @@ enum VehicleStatus {
   TURNAROUND
   MAINTENANCE
   INACTIVE
+
+  @@schema("public")
 }
 
 enum PackageStatus {
   ACTIVE
   INACTIVE
+
+  @@schema("public")
 }
 
 enum StopType {
   PICKUP
   INTERMEDIATE
   DROPOFF
+
+  @@schema("public")
 }
 
 enum BookingType {
   TOUR_PACKAGE
   CUSTOM_TRIP
+
+  @@schema("public")
 }
 
 enum BookingStatus {
@@ -95,6 +116,8 @@ enum BookingStatus {
   CANCELLED
   REJECTED
   EXPIRED
+
+  @@schema("public")
 }
 
 enum AssignmentStatus {
@@ -106,6 +129,8 @@ enum AssignmentStatus {
   RELEASED
   REPLACED
   COMPLETED
+
+  @@schema("public")
 }
 
 enum MaintenanceType {
@@ -114,6 +139,8 @@ enum MaintenanceType {
   INSPECTION
   CLEANING
   REFUELING
+
+  @@schema("public")
 }
 
 enum MaintenanceStatus {
@@ -121,11 +148,15 @@ enum MaintenanceStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+
+  @@schema("public")
 }
 
 enum PaymentChannel {
   ONLINE
   MANUAL
+
+  @@schema("public")
 }
 
 enum PaymentMethod {
@@ -134,6 +165,8 @@ enum PaymentMethod {
   BANK_TRANSFER
   CASH
   OTHER
+
+  @@schema("public")
 }
 
 enum PaymentStatus {
@@ -143,6 +176,8 @@ enum PaymentStatus {
   FAILED
   EXPIRED
   REFUNDED
+
+  @@schema("public")
 }
 
 enum ReceivableStatus {
@@ -151,6 +186,8 @@ enum ReceivableStatus {
   PAID
   OVERDUE
   WAIVED
+
+  @@schema("public")
 }
 
 enum CancellationCategory {
@@ -159,6 +196,8 @@ enum CancellationCategory {
   PAYMENT_DEADLINE
   OPERATIONAL
   OTHER
+
+  @@schema("public")
 }
 
 enum CancellationStatus {
@@ -166,11 +205,15 @@ enum CancellationStatus {
   APPROVED
   REJECTED
   COMPLETED
+
+  @@schema("public")
 }
 
 enum RefundType {
   FULL
   PARTIAL
+
+  @@schema("public")
 }
 
 enum RefundMethod {
@@ -178,6 +221,8 @@ enum RefundMethod {
   BANK_TRANSFER
   CASH
   OTHER
+
+  @@schema("public")
 }
 
 enum RefundStatus {
@@ -185,6 +230,8 @@ enum RefundStatus {
   PROCESSING
   REFUNDED
   REJECTED
+
+  @@schema("public")
 }
 
 enum TravelSlipStatus {
@@ -192,6 +239,8 @@ enum TravelSlipStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+
+  @@schema("public")
 }
 
 enum NotificationType {
@@ -202,6 +251,16 @@ enum NotificationType {
   REFUND
   TRIP
   SYSTEM
+
+  @@schema("public")
+}
+
+model AuthUser {
+  id      String       @id @db.Uuid
+  profile UserProfile?
+
+  @@map("users")
+  @@schema("auth")
 }
 
 model UserProfile {
@@ -220,8 +279,10 @@ model UserProfile {
   bookings      Booking[]     @relation("CustomerBookings")
   cancellations BookingCancellation[] @relation("CancellationRequester")
   notifications Notification[]
+  authUser      AuthUser              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("user_profile")
+  @@schema("public")
 }
 
 model Customer {
@@ -232,6 +293,7 @@ model Customer {
   user      UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@map("customer")
+  @@schema("public")
 }
 
 model Staff {
@@ -249,6 +311,7 @@ model Staff {
   processedRefunds Refund[]         @relation("RefundProcessor")
 
   @@map("staff")
+  @@schema("public")
 }
 
 model Driver {
@@ -264,6 +327,7 @@ model Driver {
   addedStops    BookingStop[] @relation("AddedStopDriver")
 
   @@map("driver")
+  @@schema("public")
 }
 
 model VehicleType {
@@ -276,6 +340,7 @@ model VehicleType {
   outsourcedDetails     OutsourcedDetails[]
 
   @@map("vehicle_type")
+  @@schema("public")
 }
 
 model Vehicle {
@@ -300,6 +365,7 @@ model Vehicle {
   maintenanceRecords MaintenanceRecord[]
 
   @@map("vehicle")
+  @@schema("public")
 }
 
 model TourPackage {
@@ -318,6 +384,7 @@ model TourPackage {
   bookings                 Booking[]
 
   @@map("tour_package")
+  @@schema("public")
 }
 
 model PackageStop {
@@ -336,6 +403,7 @@ model PackageStop {
 
   @@unique([tourPackageId, sequenceNumber])
   @@map("package_stop")
+  @@schema("public")
 }
 
 model Booking {
@@ -369,6 +437,7 @@ model Booking {
   @@index([customerUserId, createdAt])
   @@index([bookingStatus, startDatetime])
   @@map("booking")
+  @@schema("public")
 }
 
 model BookingStop {
@@ -392,6 +461,7 @@ model BookingStop {
 
   @@unique([bookingId, sequenceNumber])
   @@map("booking_stop")
+  @@schema("public")
 }
 
 model BookingAssignment {
@@ -408,6 +478,7 @@ model BookingAssignment {
   travelSlip       TravelSlip?
 
   @@map("booking_assignment")
+  @@schema("public")
 }
 
 model PricingConfiguration {
@@ -426,6 +497,7 @@ model PricingConfiguration {
   pricingCalculations  PricingCalculation[]
 
   @@map("pricing_configuration")
+  @@schema("public")
 }
 
 model FuelPriceRecord {
@@ -439,6 +511,7 @@ model FuelPriceRecord {
   pricingCalculations PricingCalculation[]
 
   @@map("fuel_price_record")
+  @@schema("public")
 }
 
 model PricingCalculation {
@@ -463,6 +536,7 @@ model PricingCalculation {
   fuelPriceRecord      FuelPriceRecord?      @relation(fields: [fuelPriceRecordId], references: [id], onDelete: SetNull)
 
   @@map("pricing_calculation")
+  @@schema("public")
 }
 
 model Payment {
@@ -490,6 +564,7 @@ model Payment {
   @@index([bookingId, paymentStatus])
   @@unique([provider, providerReference])
   @@map("payment")
+  @@schema("public")
 }
 
 model PaymentProof {
@@ -502,6 +577,7 @@ model PaymentProof {
   payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
   @@map("payment_proof")
+  @@schema("public")
 }
 
 model AccountsReceivable {
@@ -518,6 +594,7 @@ model AccountsReceivable {
   booking            Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("accounts_receivable")
+  @@schema("public")
 }
 
 model BookingCancellation {
@@ -540,6 +617,7 @@ model BookingCancellation {
   reviewedByStaff       Staff?                @relation("CancellationReviewer", fields: [reviewedByStaffId], references: [id], onDelete: SetNull)
 
   @@map("booking_cancellation")
+  @@schema("public")
 }
 
 model Refund {
@@ -560,6 +638,7 @@ model Refund {
   processedByStaff   Staff?       @relation("RefundProcessor", fields: [processedByStaffId], references: [id], onDelete: SetNull)
 
   @@map("refund")
+  @@schema("public")
 }
 
 model OutsourcedDetails {
@@ -580,6 +659,7 @@ model OutsourcedDetails {
   recordedByStaff   Staff       @relation("OutsourcingRecorder", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@map("outsourced_details")
+  @@schema("public")
 }
 
 model MaintenanceRecord {
@@ -598,6 +678,7 @@ model MaintenanceRecord {
   recordedByStaff   Staff             @relation("MaintenanceRecorder", fields: [recordedByStaffId], references: [id], onDelete: Restrict)
 
   @@map("maintenance_record")
+  @@schema("public")
 }
 
 model TravelSlip {
@@ -614,6 +695,7 @@ model TravelSlip {
   bookingAssignment   BookingAssignment @relation(fields: [bookingAssignmentId], references: [id], onDelete: Cascade)
 
   @@map("travel_slip")
+  @@schema("public")
 }
 
 model Notification {
@@ -631,5 +713,6 @@ model Notification {
   recipient       UserProfile      @relation(fields: [recipientUserId], references: [userId], onDelete: Cascade)
 
   @@map("notification")
+  @@schema("public")
 }
 
