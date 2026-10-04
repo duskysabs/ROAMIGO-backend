@@ -6,9 +6,14 @@ alter, grant access to, or delete any Supabase `auth` object. The existing
 `user_profile` table and its `auth.users` foreign key remain owned by the
 earlier baseline and Supabase integration.
 
+The committed migration name is `20261002071745_tables`. Its SQL is restored
+verbatim because the approved Supabase database has already applied that exact
+migration. Do not rename, edit, or replace it with an equivalent migration:
+Prisma identifies applied migrations by their recorded name and checksum.
+
 ## Review boundary
 
-`20261004143000_booking_domain` creates the domain entities represented in
+`20261002071745_tables` creates the domain entities represented in
 `prisma/schema.prisma`: customer and staff profiles, fleet, packages, bookings
 and stops, pricing records, payments, receivables, cancellations, refunds,
 outsourcing, maintenance, travel slips, and notifications. It preserves the
@@ -20,13 +25,24 @@ driver or vehicle schedule overlap. Assignment is not in the initial booking
 demo flow, and overlap protection requires a later migration once the
 reservation interval and active assignment statuses are finalized.
 
-## Pre-deployment checklist
+## Migration-history recovery
+
+If Prisma reports that `20261002071745_tables` exists in the database but is
+missing locally, recover the exact committed migration file first. Do not
+create a second migration for the same tables or enums. A duplicate migration
+will fail on the first existing object and leave a failed migration record.
+
+If that duplicate migration was attempted and failed before any schema change,
+mark only that failed migration as rolled back using its exact name. Then run
+`pnpm prisma migrate status` again after restoring the original migration.
+
+## Pre-deployment checklist for future migrations
 
 1. Use an approved non-production Supabase or Postgres environment with the
    `auth.users` table and the existing `user_profile` baseline already applied.
 2. Confirm `DIRECT_URL` points to that environment. Never commit its value.
-3. Run `pnpm prisma migrate status` and confirm only
-   `20261004143000_booking_domain` is pending.
+3. Run `pnpm prisma migrate status` and confirm the migration history is
+   consistent before adding any new pending migration.
 4. Take an environment backup or snapshot before applying the migration.
 5. Run `pnpm prisma migrate deploy` and then `pnpm prisma migrate status`.
 6. Run `pnpm prisma generate` so the generated client follows the committed
