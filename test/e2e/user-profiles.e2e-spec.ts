@@ -24,16 +24,18 @@ describe('User profile authorization', () => {
   let app: INestApplication<App>;
 
   const getUser = vi.fn();
+  const verifyAccessToken = vi.fn();
   const findAll = vi.fn();
+  const completeCustomerProfile = vi.fn();
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(AuthService)
-      .useValue({ getUser })
+      .useValue({ getUser, verifyAccessToken })
       .overrideProvider(UserProfilesService)
-      .useValue({ findAll })
+      .useValue({ findAll, completeCustomerProfile })
       .compile();
 
     app = module.createNestApplication();
@@ -62,6 +64,40 @@ describe('User profile authorization', () => {
 
     expect(getUser).not.toHaveBeenCalled();
     expect(findAll).not.toHaveBeenCalled();
+  });
+
+  it('allows an authenticated user without a profile to complete a customer profile', async () => {
+    verifyAccessToken.mockResolvedValue({
+      id: 'new-customer-id',
+      email: 'customer@example.com',
+    });
+    completeCustomerProfile.mockResolvedValue({
+      userId: 'new-customer-id',
+      role: UserRole.CUSTOMER,
+    });
+
+    await request(app.getHttpServer())
+      .post('/user-profiles/me/complete')
+      .set('Authorization', 'Bearer new-customer-token')
+      .send({ firstName: 'New', lastName: 'Customer' })
+      .expect(HttpStatus.CREATED)
+      .expect({ userId: 'new-customer-id', role: UserRole.CUSTOMER });
+
+    expect(verifyAccessToken).toHaveBeenCalledWith('new-customer-token');
+    expect(completeCustomerProfile).toHaveBeenCalledWith('new-customer-id', {
+      firstName: 'New',
+      lastName: 'Customer',
+    });
+  });
+
+  it('rejects profile completion without a valid access token', async () => {
+    await request(app.getHttpServer())
+      .post('/user-profiles/me/complete')
+      .send({ firstName: 'New', lastName: 'Customer' })
+      .expect(HttpStatus.UNAUTHORIZED);
+
+    expect(verifyAccessToken).not.toHaveBeenCalled();
+    expect(completeCustomerProfile).not.toHaveBeenCalled();
   });
 
   it('allows an administrator to list profiles', async () => {

@@ -3,12 +3,18 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/guards/supabase-auth.guard.js';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard.js';
+import {
+  SupabaseTokenGuard,
+  type TokenAuthenticatedRequest,
+} from '../auth/guards/supabase-token-guard.js';
+import { CompleteProfileDto } from './dto/complete-profile.dto.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
 import { UserProfilesService } from './user-profiles.service.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
@@ -17,6 +23,22 @@ import { UserRole } from '../generated/prisma/enums.js';
 @Controller('user-profiles')
 export class UserProfilesController {
   constructor(private readonly userProfilesService: UserProfilesService) {}
+
+  @Post('me/complete')
+  @UseGuards(SupabaseTokenGuard)
+  completeMyCustomerProfile(
+    @Req() request: TokenAuthenticatedRequest,
+    @Body() dto: CompleteProfileDto,
+  ) {
+    if (!request.user) {
+      throw new UnauthorizedException('Authenticated user not found');
+    }
+
+    return this.userProfilesService.completeCustomerProfile(
+      request.user.id,
+      dto,
+    );
+  }
 
   @Patch('me')
   @UseGuards(SupabaseAuthGuard)
