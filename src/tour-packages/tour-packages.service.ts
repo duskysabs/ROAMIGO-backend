@@ -74,7 +74,13 @@ export class TourPackagesService {
       where: { packageStatus: PackageStatus.ACTIVE },
       include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
       orderBy: { packageName: 'asc' },
-    });
+    }).then((packages) => packages.map((tourPackage) => this.toCustomerPackage(tourPackage)));
+  }
+
+  async findOneForCustomers(id: string) {
+    const tourPackage = await this.prisma.tourPackage.findFirst({ where: { id, packageStatus: PackageStatus.ACTIVE }, include: { stops: { orderBy: { sequenceNumber: 'asc' } } } });
+    if (!tourPackage) throw new NotFoundException('Tour package not found');
+    return this.toCustomerPackage(tourPackage);
   }
 
   private async ensureExists(id: string) {
@@ -89,5 +95,11 @@ export class TourPackagesService {
     if (stops.filter((stop) => stop.stopType === StopType.PICKUP).length !== 1 || stops.filter((stop) => stop.stopType === StopType.DROPOFF).length !== 1) {
       throw new BadRequestException('A package route must contain one pickup and one dropoff');
     }
+  }
+
+  // Keep internal creator, status-management, and timestamp fields out of the
+  // customer catalog contract while retaining the server-authoritative route.
+  private toCustomerPackage(tourPackage: { id: string; packageName: string; description: string; basePrice: { toString(): string }; estimatedDurationMinutes: number; stops: Array<{ sequenceNumber: number; stopType: string; locationName: string; activity: string; formattedAddress: string; latitude: { toString(): string }; longitude: { toString(): string }; defaultStopMinutes: number }> }) {
+    return { id: tourPackage.id, name: tourPackage.packageName, description: tourPackage.description, basePrice: tourPackage.basePrice.toString(), estimatedDurationMinutes: tourPackage.estimatedDurationMinutes, stops: tourPackage.stops.map((stop) => ({ sequenceNumber: stop.sequenceNumber, stopType: stop.stopType, locationName: stop.locationName, activity: stop.activity, formattedAddress: stop.formattedAddress, latitude: stop.latitude.toString(), longitude: stop.longitude.toString(), plannedStopMinutes: stop.defaultStopMinutes })) };
   }
 }

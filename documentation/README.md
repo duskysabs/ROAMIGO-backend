@@ -10,6 +10,9 @@ This directory contains the technical documentation for the ROAMIGO backend.
 ### System Architecture
 - [System architecture](./architecture/overview.md) — Major components and how they communicate.
 
+### Booking API
+- [Booking MVP contract](./api/booking-mvp-contract.md) — Customer catalog, quote preview, booking, and state semantics.
+
 ### Testing
 - [Testing overview](./testing/overview.md) — Testing levels, structure, commands, and security practices.
 - [Authentication unit tests](./testing/unit/authentication.md) — Service, controller, and guard unit tests.

@@ -14,6 +14,9 @@ export class TourPackagesController {
   @Get('tour-packages')
   findForCustomers() { return this.tourPackagesService.findForCustomers(); }
 
+  @Get('tour-packages/:tourPackageId')
+  findOneForCustomers(@Param('tourPackageId') id: string) { return this.tourPackagesService.findOneForCustomers(id); }
+
   @Get('staff/tour-packages')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
   findForStaff() { return this.tourPackagesService.findForStaff(); }

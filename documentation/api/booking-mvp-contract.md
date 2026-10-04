@@ -1,0 +1,36 @@
+# Booking MVP API contract
+
+## Customer catalog
+
+- `GET /booking-options/vehicle-types` returns customer-selectable vehicle type
+  IDs, names, and maximum available capacity. It never exposes vehicle plates,
+  Driver records, or operational fleet status.
+- `GET /tour-packages` returns active packages only.
+- `GET /tour-packages/:tourPackageId` returns one active package or `404`.
+  Stops are ordered and server-authoritative.
+
+## Quote preview
+
+`POST /bookings/quote` accepts the same route and schedule inputs as booking
+submission. The server validates the route shape, active package, vehicle type,
+and advisory fleet eligibility before using the pricing boundary. The response
+contains PHP amount, duration, distance, and pricing mode. A preview does not
+reserve capacity or permit a client to choose the accepted price.
+
+The current deterministic MVP reports `0.00` distance until Geoapify supplies
+authoritative route metrics. Preview responses are not yet expiring booking
+tokens. Issue #14 adds the server-issued quote binding, expiry, and idempotent
+submission behavior.
+
+## Customer bookings
+
+- `POST /bookings` creates a booking at `AWAITING_PAYMENT` after server-side
+  validation and pricing.
+- `GET /bookings/me?status=&cursor=&limit=` returns a customer-owned page.
+  `limit` defaults to 20 and is capped at 50.
+- `GET /bookings/:bookingId` returns only a booking owned by the caller. A
+  cross-customer ID returns `404`.
+
+Booking, payment, assignment, cancellation, and refund states are separate
+response fields. A quote is not a payment, reservation, assignment, or trip
+confirmation.
