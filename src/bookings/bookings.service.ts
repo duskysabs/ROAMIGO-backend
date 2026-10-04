@@ -27,8 +27,8 @@ export class BookingsService {
   /** Validates, prices, and persists a customer booking with its route stops. */
   async create(customerUserId: string, dto: CreateBookingDto) {
     this.validateCreateRequest(dto);
-    const packageStops = await this.validateBookingSelections(dto);
-    const routeStops = packageStops ?? dto.stops!;
+    const selection = await this.validateBookingSelections(dto);
+    const routeStops = selection.stops ?? dto.stops!;
 
     // Customer input never supplies price, distance, or duration. Those values
     // must come from the backend-controlled pricing integration.
@@ -43,6 +43,8 @@ export class BookingsService {
         latitude: stop.latitude,
         longitude: stop.longitude,
       })),
+      tourPackageBasePrice: selection.tourPackageBasePrice,
+      tourPackageDurationMinutes: selection.tourPackageDurationMinutes,
     });
 
     // Nested creation keeps the booking and its ordered stops atomic.
@@ -74,6 +76,22 @@ export class BookingsService {
             activity: stop.activity,
             plannedStopMinutes: stop.plannedStopMinutes,
           })),
+        },
+        // Keep the configuration snapshot with the accepted booking. Future
+        // Admin price changes must not rewrite historical quote evidence.
+        pricingCalculations: {
+          create: {
+            pricingConfigId: quote.pricingConfigurationId,
+            baseRateUsed: quote.baseRateUsed,
+            distanceKm: quote.totalDistanceKm,
+            tripDurationMinutes: quote.estimatedDurationMinutes,
+            bookingDemandCount: 0,
+            vehicleAvailability: 0,
+            driverAvailability: 0,
+            suggestedAmount: quote.finalQuotedPrice,
+            adjustmentPercentage: quote.adjustmentPercentage,
+            modelVersion: quote.modelVersion,
+          },
         },
       },
       include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
@@ -169,7 +187,7 @@ export class BookingsService {
     }
 
     if (!dto.tourPackageId) {
-      return null;
+      return {};
     }
 
     // Only staff-approved, active packages may enter the pricing workflow.
@@ -187,15 +205,19 @@ export class BookingsService {
     }
 
     // Snapshot approved package stops so future package edits cannot rewrite history.
-    return tourPackage.stops.map((stop) => ({
-      stopType: stop.stopType,
-      locationName: stop.locationName,
-      formattedAddress: stop.formattedAddress,
-      latitude: Number(stop.latitude),
-      longitude: Number(stop.longitude),
-      activity: stop.activity,
-      plannedStopMinutes: stop.defaultStopMinutes,
-    }));
+    return {
+      stops: tourPackage.stops.map((stop) => ({
+        stopType: stop.stopType,
+        locationName: stop.locationName,
+        formattedAddress: stop.formattedAddress,
+        latitude: Number(stop.latitude),
+        longitude: Number(stop.longitude),
+        activity: stop.activity,
+        plannedStopMinutes: stop.defaultStopMinutes,
+      })),
+      tourPackageBasePrice: tourPackage.basePrice.toString(),
+      tourPackageDurationMinutes: tourPackage.estimatedDurationMinutes,
+    };
   }
 
   /** Returns the authenticated customer's booking history, never a global list. */

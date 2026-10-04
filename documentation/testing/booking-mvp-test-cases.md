@@ -55,7 +55,7 @@ Use a non-production Supabase project and redacted fixture data.
 | BKG-04 | Package booking with inactive or incomplete package | Request is rejected | Automated unit coverage |
 | BKG-05 | No matching available driver and vehicle | Request is rejected and no booking is created | Automated unit coverage |
 | BKG-06 | Valid route, fleet, and price quote | Creates booking with `AWAITING_PAYMENT` and snapshots stops | Automated unit coverage with mocked pricing |
-| BKG-07 | Real MVP booking request | Produces a deterministic quote and persists `AWAITING_PAYMENT` | Blocked by #31 deterministic admin pricing |
+| BKG-07 | Real MVP booking request | Uses one active effective Admin configuration and persists `AWAITING_PAYMENT` with calculation evidence | Manual API verification required |
 
 ## Deferred workflow boundaries
 
@@ -63,7 +63,7 @@ Use a non-production Supabase project and redacted fixture data.
 | --- | --- | --- | --- |
 | PAY-01 | Payment intent or verified manual payment | Payment is recorded and booking may advance only after verification | Not implemented |
 | ASN-01 | Post-payment assignment | Rechecks availability transactionally and prevents schedule overlaps | Not implemented |
-| GEO-01 | Geoapify address and route lookup | Provider response is validated; outage does not create a false quote | Not implemented |
+| GEO-01 | Geoapify address and route lookup | Provider response is validated; outage does not create a false quote | Not implemented, MVP fixed pricing records zero route distance |
 | AUD-01 | Master-data change audit | Actor, timestamp, reason, and before/after values persist | Requires schema work |
 | VHC-01 | Admin-defined vehicle classification | New type is customer-selectable without a code deployment | Blocked by fixed `VehicleTypeName` enum |
 

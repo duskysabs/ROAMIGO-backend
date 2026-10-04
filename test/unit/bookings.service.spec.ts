@@ -152,6 +152,10 @@ describe('BookingsService', () => {
       totalDistanceKm: '25.50',
       estimatedDurationMinutes: 90,
       finalQuotedPrice: '1500.00',
+      pricingConfigurationId: 'pricing-config-id',
+      baseRateUsed: '1500.00',
+      adjustmentPercentage: '0.00',
+      modelVersion: 'admin-fixed-v1',
     });
     create.mockResolvedValue({ id: 'booking-id' });
 
@@ -199,6 +203,8 @@ describe('BookingsService', () => {
     findTourPackage.mockResolvedValue({
       id: 'package-id',
       packageStatus: PackageStatus.ACTIVE,
+      basePrice: '1200.00',
+      estimatedDurationMinutes: 90,
       stops: [
         {
           sequenceNumber: 1,
@@ -226,6 +232,10 @@ describe('BookingsService', () => {
       totalDistanceKm: '25.50',
       estimatedDurationMinutes: 90,
       finalQuotedPrice: '1500.00',
+      pricingConfigurationId: 'pricing-config-id',
+      baseRateUsed: '300.00',
+      adjustmentPercentage: '0.00',
+      modelVersion: 'admin-fixed-v1',
     });
     create.mockResolvedValue({ id: 'booking-id' });
 
