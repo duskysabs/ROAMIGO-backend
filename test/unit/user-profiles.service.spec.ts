@@ -1,16 +1,23 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { UserProfilesService } from '../../src/user-profiles/user-profiles.service.js';
+import {
+  AccountStatus,
+  UserRole,
+} from '../../src/generated/prisma/enums.js';
 
 describe('UserProfilesService', () => {
   let userProfilesService: UserProfilesService;
 
   const findUnique = vi.fn();
+  const create = vi.fn();
 
   const mockPrismaService = {
     userProfile: {
       findUnique,
+      create,
     },
   };
 
@@ -72,5 +79,45 @@ describe('UserProfilesService', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it('creates an active customer profile for a token-authenticated user', async () => {
+    findUnique.mockResolvedValue(null);
+    create.mockResolvedValue({ userId: 'customer-id' });
+
+    await expect(
+      userProfilesService.completeCustomerProfile('customer-id', {
+        firstName: 'Customer',
+        lastName: 'Demo',
+        birthDate: '2000-01-02',
+        homeAddress: 'Demo address',
+      }),
+    ).resolves.toEqual({ userId: 'customer-id' });
+
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        userId: 'customer-id',
+        firstName: 'Customer',
+        lastName: 'Demo',
+        birthDate: new Date('2000-01-02'),
+        homeAddress: 'Demo address',
+        role: UserRole.CUSTOMER,
+        accountStatus: AccountStatus.ACTIVE,
+        customer: { create: {} },
+      },
+    });
+  });
+
+  it('does not replace an existing profile during completion', async () => {
+    findUnique.mockResolvedValue({ userId: 'customer-id' });
+
+    await expect(
+      userProfilesService.completeCustomerProfile('customer-id', {
+        firstName: 'Customer',
+        lastName: 'Demo',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(create).not.toHaveBeenCalled();
   });
 });

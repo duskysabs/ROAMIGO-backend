@@ -1,6 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { UpdateProfileDto } from './dto/update-profile.dto.js';
+import { CompleteProfileDto } from './dto/complete-profile.dto.js';
+import {
+  AccountStatus,
+  UserRole,
+} from '../generated/prisma/enums.js';
 
 @Injectable()
 export class UserProfilesService {
@@ -18,6 +27,31 @@ export class UserProfilesService {
         return this.prisma.userProfile.findMany({
             orderBy: {
                 createdAt: 'desc',
+            },
+        });
+    }
+
+    async completeCustomerProfile(userId: string, dto: CompleteProfileDto) {
+        // Public completion never accepts a caller-controlled role or account
+        // status. Privileged profiles use the restricted bootstrap process.
+        const existingProfile = await this.findByUserId(userId);
+
+        if (existingProfile) {
+            throw new ConflictException('Profile already exists');
+        }
+
+        return this.prisma.userProfile.create({
+            data: {
+                userId,
+                firstName: dto.firstName,
+                lastName: dto.lastName,
+                birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+                homeAddress: dto.homeAddress,
+                role: UserRole.CUSTOMER,
+                accountStatus: AccountStatus.ACTIVE,
+                customer: {
+                    create: {},
+                },
             },
         });
     }
