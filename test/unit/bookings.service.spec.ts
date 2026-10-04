@@ -24,6 +24,12 @@ describe('BookingsService', () => {
   const findVehicleType = vi.fn();
   const findCapacityMatch = vi.fn();
   const findTourPackage = vi.fn();
+  const bookingRead = {
+    id: 'booking-id', bookingType: BookingType.CUSTOM_TRIP, bookingStatus: BookingStatus.AWAITING_PAYMENT,
+    startDatetime: new Date('2026-10-08T08:00:00Z'), endDatetime: new Date('2026-10-08T10:00:00Z'), passengerCount: 2,
+    totalDistanceKm: '0.00', estimatedDurationMinutes: 120, finalQuotedPrice: '1200.00', createdAt: new Date('2026-10-01T00:00:00Z'),
+    tourPackage: null, vehicleType: { id: 'vehicle-type-id', vehicleType: 'VAN' }, stops: [], assignments: [], payments: [], cancellation: null,
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -51,11 +57,11 @@ describe('BookingsService', () => {
   });
 
   it('returns only bookings owned by the authenticated customer', async () => {
-    const bookings = [{ id: 'booking-id', customerUserId: 'customer-id' }];
+    const bookings = [bookingRead];
     findMany.mockResolvedValue(bookings);
 
     await expect(bookingsService.findMine('customer-id')).resolves.toEqual(
-      bookings,
+      { items: [expect.objectContaining({ id: 'booking-id', paymentStates: [] })], nextCursor: null },
     );
 
     expect(findMany).toHaveBeenCalledWith({
@@ -64,19 +70,22 @@ describe('BookingsService', () => {
         tourPackage: true,
         vehicleType: true,
         stops: { orderBy: { sequenceNumber: 'asc' } },
-        assignments: true,
+        assignments: { select: { assignmentStatus: true } },
+        payments: { include: { refunds: { select: { refundStatus: true } } } },
+        cancellation: { select: { cancellationStatus: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 21,
     });
   });
 
   it('returns a booking only when it belongs to the authenticated customer', async () => {
-    const booking = { id: 'booking-id', customerUserId: 'customer-id' };
+    const booking = bookingRead;
     findFirst.mockResolvedValue(booking);
 
     await expect(
       bookingsService.findOneMine('customer-id', 'booking-id'),
-    ).resolves.toEqual(booking);
+    ).resolves.toEqual(expect.objectContaining({ id: 'booking-id', assignmentStates: [] }));
 
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: 'booking-id', customerUserId: 'customer-id' },
@@ -84,9 +93,10 @@ describe('BookingsService', () => {
         tourPackage: true,
         vehicleType: true,
         stops: { orderBy: { sequenceNumber: 'asc' } },
-        assignments: true,
-        payments: true,
+        assignments: { select: { assignmentStatus: true } },
+        payments: { include: { refunds: { select: { refundStatus: true } } } },
         receivable: true,
+        cancellation: { select: { cancellationStatus: true } },
       },
     });
   });

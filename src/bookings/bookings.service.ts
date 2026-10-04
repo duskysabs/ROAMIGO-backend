@@ -16,6 +16,7 @@ import {
 } from '../generated/prisma/enums.js';
 import { PricingQuoteGateway } from '../pricing/pricing-quote.gateway.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
 
 @Injectable()
 export class BookingsService {
@@ -96,6 +97,16 @@ export class BookingsService {
       },
       include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
     });
+  }
+
+  async previewQuote(dto: CreateBookingDto) {
+    this.validateCreateRequest(dto);
+    const selection = await this.validateBookingSelections(dto);
+    const routeStops = selection.stops ?? dto.stops!;
+    const quote = await this.pricingQuoteGateway.quote({ bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime), passengerCount: dto.passengerCount, stops: routeStops.map((stop) => ({ stopType: stop.stopType, latitude: stop.latitude, longitude: stop.longitude })), tourPackageBasePrice: selection.tourPackageBasePrice, tourPackageDurationMinutes: selection.tourPackageDurationMinutes });
+    // Quote preview does not reserve capacity. #14 adds a signed, expiring quote
+    // context for tamper-resistant booking submission.
+    return { currency: 'PHP', totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, pricingMode: quote.modelVersion };
   }
 
   private validateCreateRequest(dto: CreateBookingDto) {
@@ -220,18 +231,28 @@ export class BookingsService {
     };
   }
 
-  /** Returns the authenticated customer's booking history, never a global list. */
-  findMine(customerUserId: string) {
-    return this.prisma.booking.findMany({
-      where: { customerUserId },
+  /** Returns an explicit customer-safe booking page, never a global list. */
+  async findMine(customerUserId: string, query?: ListMyBookingsDto) {
+    const limit = query?.limit ?? 20;
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        customerUserId,
+        ...(query?.status ? { bookingStatus: query.status } : {}),
+      },
       include: {
         tourPackage: true,
         vehicleType: true,
         stops: { orderBy: { sequenceNumber: 'asc' } },
-        assignments: true,
+        assignments: { select: { assignmentStatus: true } },
+        payments: { include: { refunds: { select: { refundStatus: true } } } },
+        cancellation: { select: { cancellationStatus: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(query?.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
+    const items = bookings.slice(0, limit);
+    return { items: items.map((booking) => this.toCustomerBooking(booking)), nextCursor: bookings.length > limit ? items.at(-1)?.id ?? null : null };
   }
 
   /** Retrieves a single booking only when the customer owns it. */
@@ -242,9 +263,10 @@ export class BookingsService {
         tourPackage: true,
         vehicleType: true,
         stops: { orderBy: { sequenceNumber: 'asc' } },
-        assignments: true,
-        payments: true,
+        assignments: { select: { assignmentStatus: true } },
+        payments: { include: { refunds: { select: { refundStatus: true } } } },
         receivable: true,
+        cancellation: { select: { cancellationStatus: true } },
       },
     });
 
@@ -252,6 +274,12 @@ export class BookingsService {
       throw new NotFoundException('Booking not found');
     }
 
-    return booking;
+    return this.toCustomerBooking(booking);
+  }
+
+  // Booking, payment, assignment, cancellation, and refund state are distinct
+  // fields in the customer contract. Do not collapse them into bookingStatus.
+  private toCustomerBooking(booking: any) {
+    return { id: booking.id, bookingType: booking.bookingType, bookingStatus: booking.bookingStatus, startDatetime: booking.startDatetime, endDatetime: booking.endDatetime, passengerCount: booking.passengerCount, totalDistanceKm: booking.totalDistanceKm.toString(), estimatedDurationMinutes: booking.estimatedDurationMinutes, finalQuotedPrice: booking.finalQuotedPrice.toString(), createdAt: booking.createdAt, tourPackage: booking.tourPackage ? { id: booking.tourPackage.id, name: booking.tourPackage.packageName } : null, vehicleType: { id: booking.vehicleType.id, name: booking.vehicleType.vehicleType }, stops: booking.stops.map((stop: any) => ({ sequenceNumber: stop.sequenceNumber, stopType: stop.stopType, locationName: stop.locationName, formattedAddress: stop.formattedAddress, latitude: stop.latitude.toString(), longitude: stop.longitude.toString() })), paymentStates: booking.payments.map((payment: any) => payment.paymentStatus), assignmentStates: booking.assignments.map((assignment: any) => assignment.assignmentStatus), cancellationState: booking.cancellation?.cancellationStatus ?? null, refundStates: booking.payments.flatMap((payment: any) => payment.refunds.map((refund: any) => refund.refundStatus)) };
   }
 }

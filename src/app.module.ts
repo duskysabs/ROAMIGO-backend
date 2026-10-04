@@ -9,6 +9,7 @@ import { UserProfilesModule } from './user-profiles/user-profiles.module.js';
 import { BookingsModule } from './bookings/bookings.module.js';
 import { TourPackagesModule } from './tour-packages/tour-packages.module.js';
 import { FleetModule } from './fleet/fleet.module.js';
+import { BookingOptionsModule } from './booking-options/booking-options.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -30,6 +31,7 @@ import { FleetModule } from './fleet/fleet.module.js';
     BookingsModule,
     TourPackagesModule,
     FleetModule,
+    BookingOptionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

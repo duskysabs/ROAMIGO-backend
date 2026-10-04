@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { UserRole } from '../generated/prisma/enums.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import type { AuthenticatedRequest } from '../auth/guards/supabase-auth.guard.js';
 import { BookingsService } from './bookings.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
 
 @Controller('bookings')
 export class BookingsController {
@@ -11,14 +12,20 @@ export class BookingsController {
 
   @Get('me')
   @Roles(UserRole.CUSTOMER)
-  findMine(@Req() request: AuthenticatedRequest) {
-    return this.bookingsService.findMine(request.user!.id);
+  findMine(@Req() request: AuthenticatedRequest, @Query() query: ListMyBookingsDto) {
+    return this.bookingsService.findMine(request.user!.id, query);
   }
 
   @Post()
   @Roles(UserRole.CUSTOMER)
   create(@Req() request: AuthenticatedRequest, @Body() dto: CreateBookingDto) {
     return this.bookingsService.create(request.user!.id, dto);
+  }
+
+  @Post('quote')
+  @Roles(UserRole.CUSTOMER)
+  previewQuote(@Body() dto: CreateBookingDto) {
+    return this.bookingsService.previewQuote(dto);
   }
 
   @Get(':bookingId')
