@@ -10,6 +10,8 @@ import { BookingsModule } from './bookings/bookings.module.js';
 import { TourPackagesModule } from './tour-packages/tour-packages.module.js';
 import { FleetModule } from './fleet/fleet.module.js';
 import { BookingOptionsModule } from './booking-options/booking-options.module.js';
+import { LocationsModule } from './locations/locations.module.js';
+import { RoutingModule } from './routing/routing.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -32,6 +34,8 @@ import { BookingOptionsModule } from './booking-options/booking-options.module.j
     TourPackagesModule,
     FleetModule,
     BookingOptionsModule,
+    LocationsModule,
+    RoutingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
