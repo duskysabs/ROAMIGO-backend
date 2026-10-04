@@ -279,6 +279,8 @@ model UserProfile {
   bookings      Booking[]     @relation("CustomerBookings")
   cancellations BookingCancellation[] @relation("CancellationRequester")
   notifications Notification[]
+  bookingQuotes BookingQuote[]
+  bookingTransitions BookingTransition[]
   authUser      AuthUser              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("user_profile")
@@ -338,6 +340,7 @@ model VehicleType {
   bookings              Booking[]
   pricingConfigurations PricingConfiguration[]
   outsourcedDetails     OutsourcedDetails[]
+  bookingQuotes        BookingQuote[]
 
   @@map("vehicle_type")
   @@schema("public")
@@ -382,6 +385,7 @@ model TourPackage {
   createdByAdmin           Staff         @relation("PackageCreator", fields: [createdByAdminId], references: [id], onDelete: Restrict)
   stops                    PackageStop[]
   bookings                 Booking[]
+  bookingQuotes            BookingQuote[]
 
   @@map("tour_package")
   @@schema("public")
@@ -420,6 +424,7 @@ model Booking {
   estimatedDurationMinutes Int           @map("estimated_duration_minutes")
   finalQuotedPrice         Decimal       @db.Decimal(12, 2) @map("final_quoted_price")
   notes                    String?       @db.Text
+  idempotencyKey           String?       @unique @db.VarChar(100) @map("idempotency_key")
   createdAt                DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
   updatedAt                DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
 
@@ -433,10 +438,56 @@ model Booking {
   receivable               AccountsReceivable?
   cancellation             BookingCancellation?
   outsourcedDetails        OutsourcedDetails?
+  quote                    BookingQuote?
+  transitions              BookingTransition[]
 
   @@index([customerUserId, createdAt])
   @@index([bookingStatus, startDatetime])
   @@map("booking")
+  @@schema("public")
+}
+
+model BookingQuote {
+  id                   String      @id @default(uuid()) @db.Uuid @map("booking_quote_id")
+  customerUserId       String      @db.Uuid @map("customer_user_id")
+  bookingType          BookingType @map("booking_type")
+  vehicleTypeId        String      @db.Uuid @map("vehicle_type_id")
+  tourPackageId        String?     @db.Uuid @map("tour_package_id")
+  requestSnapshot      Json        @map("request_snapshot") @db.JsonB
+  pricingConfigId      String      @db.Uuid @map("pricing_config_id")
+  totalDistanceKm      Decimal     @db.Decimal(12, 2) @map("total_distance_km")
+  estimatedDurationMinutes Int     @map("estimated_duration_minutes")
+  finalQuotedPrice     Decimal     @db.Decimal(12, 2) @map("final_quoted_price")
+  expiresAt            DateTime    @db.Timestamptz(3) @map("expires_at")
+  consumedAt           DateTime?   @db.Timestamptz(3) @map("consumed_at")
+  bookingId            String?     @unique @db.Uuid @map("booking_id")
+  createdAt            DateTime    @default(now()) @db.Timestamptz(3) @map("created_at")
+
+  customer             UserProfile @relation(fields: [customerUserId], references: [userId], onDelete: Restrict)
+  vehicleType          VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
+  tourPackage          TourPackage? @relation(fields: [tourPackageId], references: [id], onDelete: Restrict)
+  pricingConfiguration PricingConfiguration @relation(fields: [pricingConfigId], references: [id], onDelete: Restrict)
+  booking              Booking?    @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([customerUserId, expiresAt])
+  @@map("booking_quote")
+  @@schema("public")
+}
+
+model BookingTransition {
+  id            String        @id @default(uuid()) @db.Uuid @map("booking_transition_id")
+  bookingId     String        @db.Uuid @map("booking_id")
+  actorUserId   String        @db.Uuid @map("actor_user_id")
+  previousState BookingStatus @map("previous_state")
+  nextState     BookingStatus @map("next_state")
+  reason        String?       @db.Text
+  occurredAt    DateTime      @default(now()) @db.Timestamptz(3) @map("occurred_at")
+
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  actor         UserProfile   @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
+
+  @@index([bookingId, occurredAt])
+  @@map("booking_transition")
   @@schema("public")
 }
 
@@ -495,6 +546,7 @@ model PricingConfiguration {
 
   vehicleType          VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
   pricingCalculations  PricingCalculation[]
+  bookingQuotes        BookingQuote[]
 
   @@map("pricing_configuration")
   @@schema("public")

@@ -54,8 +54,11 @@ Use a non-production Supabase project and redacted fixture data.
 | BKG-03 | Custom route validation | Exactly one pickup and one drop-off, in valid order | Automated unit coverage |
 | BKG-04 | Package booking with inactive or incomplete package | Request is rejected | Automated unit coverage |
 | BKG-05 | No matching available driver and vehicle | Request is rejected and no booking is created | Automated unit coverage |
-| BKG-06 | Valid route, fleet, and price quote | Creates booking with `AWAITING_PAYMENT` and snapshots stops | Automated unit coverage with mocked pricing |
-| BKG-07 | Real MVP booking request | Uses one active effective Admin configuration and persists `AWAITING_PAYMENT` with calculation evidence | Manual API verification required |
+| BKG-06 | Customer requests a quote | Server stores a validated snapshot, returns a quote ID, and expires it after ten minutes without reserving capacity | Automated unit coverage required |
+| BKG-07 | Customer submits a valid quote | Atomically claims one unexpired quote, creates `AWAITING_PAYMENT`, and records the initial transition | Automated unit coverage with mocked persistence |
+| BKG-08 | Customer retries a submission with the same idempotency key | Returns the original booking without consuming another quote or creating a duplicate | Automated unit coverage |
+| BKG-09 | Customer submits an expired, consumed, or other-customer quote | Request is rejected without a booking | Automated unit coverage |
+| BKG-10 | Real MVP booking request | Uses one active effective Admin configuration and persists `AWAITING_PAYMENT` with calculation and transition evidence | Manual API verification required |
 
 ## Deferred workflow boundaries
 

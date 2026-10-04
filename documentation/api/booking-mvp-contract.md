@@ -18,14 +18,15 @@ contains PHP amount, duration, distance, and pricing mode. A preview does not
 reserve capacity or permit a client to choose the accepted price.
 
 The current deterministic MVP reports `0.00` distance until Geoapify supplies
-authoritative route metrics. Preview responses are not yet expiring booking
-tokens. Issue #14 adds the server-issued quote binding, expiry, and idempotent
-submission behavior.
+authoritative route metrics. A successful response includes a server-issued
+quote ID and a ten-minute expiry. It does not reserve capacity.
 
 ## Customer bookings
 
-- `POST /bookings` creates a booking at `AWAITING_PAYMENT` after server-side
-  validation and pricing.
+- `POST /bookings` accepts only `quoteId` and `idempotencyKey`. It rechecks
+  availability, consumes the unexpired quote once, and creates a booking at
+  `AWAITING_PAYMENT`. Retrying the same idempotency key returns the original
+  booking rather than creating another record.
 - `GET /bookings/me?status=&cursor=&limit=` returns a customer-owned page.
   `limit` defaults to 20 and is capped at 50.
 - `GET /bookings/:bookingId` returns only a booking owned by the caller. A
