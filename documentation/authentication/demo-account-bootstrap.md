@@ -62,4 +62,6 @@ The endpoint always creates an active `CUSTOMER` profile and customer record. It
 
 ## Reset
 
-Use the non-production environment reset procedure from the booking MVP runbook. Do not manually alter roles in a shared or production database.
+Use the non-production environment reset procedure from the
+[booking MVP rehearsal runbook](../demo/booking-mvp-rehearsal.md). Do not
+manually alter roles in a shared or production database.
