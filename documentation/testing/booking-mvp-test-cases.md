@@ -66,7 +66,9 @@ Use a non-production Supabase project and redacted fixture data.
 | --- | --- | --- | --- |
 | PAY-01 | Payment intent or verified manual payment | Payment is recorded and booking may advance only after verification | Not implemented |
 | ASN-01 | Post-payment assignment | Rechecks availability transactionally and prevents schedule overlaps | Not implemented |
-| GEO-01 | Geoapify address and route lookup | Provider response is validated; outage does not create a false quote | Not implemented, MVP fixed pricing records zero route distance |
+| GEO-01 | Geoapify route-backed booking quote | Provider response is validated; outage does not create a false quote | Not implemented, MVP pricing still records zero route distance |
+| GEO-02 | Location autocomplete and place resolution | Server returns normalized locations without exposing the provider key | Automated service coverage, live provider check required when enabled |
+| GEO-03 | Ordered route preview | Server resolves place IDs in supplied order and returns provider distance, duration, and geometry | Automated service coverage, live provider check required when enabled |
 | AUD-01 | Master-data change audit | Actor, timestamp, reason, and before/after values persist | Requires schema work |
 | VHC-01 | Admin-defined vehicle classification | New type is customer-selectable without a code deployment | Blocked by fixed `VehicleTypeName` enum |
 
