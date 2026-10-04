@@ -51,3 +51,11 @@ create records for supported values, but cannot introduce an arbitrary vehicle
 classification without a reviewed schema migration. Durable administrative
 audit history and a vehicle-type active lifecycle also need schema support;
 they must not be represented by application-only placeholder behavior.
+
+## Fleet-readiness MVP boundary
+
+The fleet module owns Staff/Admin list, readiness-status, designated-driver,
+and availability endpoints. Its availability result uses the same advisory
+capacity, active-employment, status, designated-pair, and schedule checks as
+booking submission. It does not reserve a vehicle or driver. Assignment and
+database-level overlap protection remain separate post-payment work.

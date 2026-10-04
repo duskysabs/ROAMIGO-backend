@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { UserProfilesModule } from './user-profiles/user-profiles.module.js';
 import { BookingsModule } from './bookings/bookings.module.js';
 import { TourPackagesModule } from './tour-packages/tour-packages.module.js';
+import { FleetModule } from './fleet/fleet.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -28,6 +29,7 @@ import { TourPackagesModule } from './tour-packages/tour-packages.module.js';
     UserProfilesModule,
     BookingsModule,
     TourPackagesModule,
+    FleetModule,
   ],
   controllers: [AppController],
   providers: [AppService],
