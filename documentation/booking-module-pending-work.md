@@ -25,6 +25,19 @@ eligible vehicle-driver pair, receives a backend-controlled price quote, and
 stores the booking as `AWAITING_PAYMENT`. It creates no payment, reservation,
 or assignment.
 
+## Deterministic pricing MVP boundary
+
+The MVP pricing gateway selects exactly one active, effective Admin pricing
+configuration for the requested vehicle type. Custom trips use that fixed PHP
+rate. Tour packages use the stored package base price plus that fixed vehicle
+rate. The booking stores the selected configuration and calculation snapshot in
+the same transaction, so later price changes do not rewrite accepted bookings.
+
+This is a demo fallback, not route-based pricing. It reports zero route
+distance until the Geoapify integration provides authoritative metrics. Quote
+identifiers, expirations, FastAPI RFR pricing, and payment confirmation remain
+separate follow-up work.
+
 ## Master-data API boundary
 
 The tour-package module owns package records and ordered stops. Administrators

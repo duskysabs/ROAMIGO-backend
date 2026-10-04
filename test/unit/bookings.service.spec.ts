@@ -152,6 +152,10 @@ describe('BookingsService', () => {
       totalDistanceKm: '25.50',
       estimatedDurationMinutes: 90,
       finalQuotedPrice: '1500.00',
+      pricingConfigurationId: 'pricing-config-id',
+      baseRateUsed: '1500.00',
+      adjustmentPercentage: '0.00',
+      modelVersion: 'admin-fixed-v1',
     });
     create.mockResolvedValue({ id: 'booking-id' });
 
@@ -226,6 +230,10 @@ describe('BookingsService', () => {
       totalDistanceKm: '25.50',
       estimatedDurationMinutes: 90,
       finalQuotedPrice: '1500.00',
+      pricingConfigurationId: 'pricing-config-id',
+      baseRateUsed: '300.00',
+      adjustmentPercentage: '0.00',
+      modelVersion: 'admin-fixed-v1',
     });
     create.mockResolvedValue({ id: 'booking-id' });
 
