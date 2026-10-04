@@ -7,6 +7,8 @@ import {
   UserRole,
 } from '../src/generated/prisma/enums.js';
 
+// This is a non-production bootstrap for the first demo Administrator. It is
+// intentionally not an HTTP endpoint or a general role-management workflow.
 const requiredEnvironment = [
   'DEMO_ADMIN_USER_ID',
   'DEMO_ADMIN_FIRST_NAME',

@@ -10,6 +10,18 @@ This procedure creates the non-production accounts required by the booking MVP d
 - Create the Supabase Auth user before running the Administrator bootstrap command.
 - The public API cannot create `ADMIN`, `STAFF`, or `DRIVER` profiles.
 
+## Maintainer notes
+
+- Keep `POST /user-profiles/me/complete` protected by `SupabaseTokenGuard`. A
+  user without a profile cannot pass `SupabaseAuthGuard`, because that guard
+  loads the profile before allowing the request.
+- Keep the completion DTO limited to Customer-owned profile fields. Do not add
+  `role` or `accountStatus` fields to it.
+- Keep the Administrator bootstrap as a non-production CLI command. Do not
+  expose its behavior through a public or authenticated HTTP endpoint.
+- If role management is added later, use a separately authorized Admin
+  workflow with an audit trail rather than extending this demo command.
+
 ## Administrator
 
 1. Create or identify the Administrator's Supabase Auth user in the non-production Supabase project.

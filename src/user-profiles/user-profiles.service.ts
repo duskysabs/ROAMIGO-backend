@@ -32,6 +32,8 @@ export class UserProfilesService {
     }
 
     async completeCustomerProfile(userId: string, dto: CompleteProfileDto) {
+        // Public completion never accepts a caller-controlled role or account
+        // status. Privileged profiles use the restricted bootstrap process.
         const existingProfile = await this.findByUserId(userId);
 
         if (existingProfile) {

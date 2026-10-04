@@ -24,6 +24,8 @@ import { UserRole } from '../generated/prisma/enums.js';
 export class UserProfilesController {
   constructor(private readonly userProfilesService: UserProfilesService) {}
 
+  // This route uses token-only authentication because users without a profile
+  // cannot pass SupabaseAuthGuard, which loads the profile before continuing.
   @Post('me/complete')
   @UseGuards(SupabaseTokenGuard)
   completeMyCustomerProfile(
