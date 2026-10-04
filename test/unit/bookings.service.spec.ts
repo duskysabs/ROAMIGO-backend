@@ -203,6 +203,8 @@ describe('BookingsService', () => {
     findTourPackage.mockResolvedValue({
       id: 'package-id',
       packageStatus: PackageStatus.ACTIVE,
+      basePrice: '1200.00',
+      estimatedDurationMinutes: 90,
       stops: [
         {
           sequenceNumber: 1,

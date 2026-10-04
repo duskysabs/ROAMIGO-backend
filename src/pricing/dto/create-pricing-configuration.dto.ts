@@ -1,4 +1,3 @@
-import { Type } from 'class-transformer';
 import { IsDateString, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
 
 export class CreatePricingConfigurationDto {
