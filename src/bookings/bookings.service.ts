@@ -232,11 +232,12 @@ export class BookingsService {
   }
 
   /** Returns an explicit customer-safe booking page, never a global list. */
-  async findMine(customerUserId: string, query: ListMyBookingsDto = {}) {
+  async findMine(customerUserId: string, query?: ListMyBookingsDto) {
+    const limit = query?.limit ?? 20;
     const bookings = await this.prisma.booking.findMany({
       where: {
         customerUserId,
-        ...(query.status ? { bookingStatus: query.status } : {}),
+        ...(query?.status ? { bookingStatus: query.status } : {}),
       },
       include: {
         tourPackage: true,
@@ -247,11 +248,11 @@ export class BookingsService {
         cancellation: { select: { cancellationStatus: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: query.limit + 1,
-      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      take: limit + 1,
+      ...(query?.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
-    const items = bookings.slice(0, query.limit);
-    return { items: items.map((booking) => this.toCustomerBooking(booking)), nextCursor: bookings.length > query.limit ? items.at(-1)?.id ?? null : null };
+    const items = bookings.slice(0, limit);
+    return { items: items.map((booking) => this.toCustomerBooking(booking)), nextCursor: bookings.length > limit ? items.at(-1)?.id ?? null : null };
   }
 
   /** Retrieves a single booking only when the customer owns it. */
