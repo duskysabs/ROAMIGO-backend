@@ -16,6 +16,9 @@ This directory contains the technical documentation for the ROAMIGO backend.
 - [Authentication end-to-end tests](./testing/e2e/authentication.md) — HTTP login and protected-route tests.
 
 ### Supabase PostgreSQL and Prisma
+
+- [Booking domain migration runbook](./database/booking-domain-migration-runbook.md) - Public booking-schema rollout, verification, and recovery boundaries.
+
 ### Database migrations
 ### API testing 
 ### Docker and deployment
