@@ -1,8 +1,8 @@
 # Booking Module: Pending Work
 
-This branch establishes the booking-foundation schema and customer booking API.
-It deliberately stops before any action that could confirm a payment, reserve a
-vehicle, or assign a driver.
+This module establishes the booking-foundation schema, durable quote flow, and
+customer booking API. It deliberately stops before any action that could
+confirm a payment, reserve a vehicle, or assign a driver.
 
 ## Required before production use
 
@@ -20,10 +20,12 @@ vehicle, or assign a driver.
 
 ## Current lifecycle boundary
 
-`POST /bookings` validates the customer request, verifies there is a currently
-eligible vehicle-driver pair, receives a backend-controlled price quote, and
-stores the booking as `AWAITING_PAYMENT`. It creates no payment, reservation,
-or assignment.
+`POST /bookings/quote` validates the customer request, verifies there is a
+currently eligible vehicle-driver pair, and creates a server-owned quote that
+expires after ten minutes. `POST /bookings` accepts only that quote ID and a
+customer-supplied idempotency key. It rechecks availability, atomically claims
+the quote, stores the booking as `AWAITING_PAYMENT`, and records its initial
+booking transition. It creates no payment, reservation, or assignment.
 
 ## Deterministic pricing MVP boundary
 
@@ -34,9 +36,19 @@ rate. The booking stores the selected configuration and calculation snapshot in
 the same transaction, so later price changes do not rewrite accepted bookings.
 
 This is a demo fallback, not route-based pricing. It reports zero route
-distance until the Geoapify integration provides authoritative metrics. Quote
-identifiers, expirations, FastAPI RFR pricing, and payment confirmation remain
-separate follow-up work.
+distance until the Geoapify integration provides authoritative metrics. FastAPI
+RFR pricing and payment confirmation remain separate follow-up work.
+
+## Quote and lifecycle boundary
+
+The durable quote stores the validated request snapshot and price evidence, so
+the customer cannot submit a client-modified amount or route after reviewing a
+quote. A quote is consumed at most once and is bound to the created booking.
+The submission transaction records the initial `DRAFT` to
+`AWAITING_PAYMENT` transition. This is lifecycle evidence for the demo flow,
+not the complete transition policy. Booking Review, payment confirmation,
+cancellation, and assignment transitions still require their own authorized
+workflows and audit rules.
 
 ## Master-data API boundary
 

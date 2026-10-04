@@ -5,6 +5,7 @@ import type { AuthenticatedRequest } from '../auth/guards/supabase-auth.guard.js
 import { BookingsService } from './bookings.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
+import { SubmitBookingQuoteDto } from './dto/submit-booking-quote.dto.js';
 
 @Controller('bookings')
 export class BookingsController {
@@ -18,14 +19,14 @@ export class BookingsController {
 
   @Post()
   @Roles(UserRole.CUSTOMER)
-  create(@Req() request: AuthenticatedRequest, @Body() dto: CreateBookingDto) {
-    return this.bookingsService.create(request.user!.id, dto);
+  create(@Req() request: AuthenticatedRequest, @Body() dto: SubmitBookingQuoteDto) {
+    return this.bookingsService.submitQuote(request.user!.id, dto);
   }
 
   @Post('quote')
   @Roles(UserRole.CUSTOMER)
-  previewQuote(@Body() dto: CreateBookingDto) {
-    return this.bookingsService.previewQuote(dto);
+  previewQuote(@Req() request: AuthenticatedRequest, @Body() dto: CreateBookingDto) {
+    return this.bookingsService.issueQuote(request.user!.id, dto);
   }
 
   @Get(':bookingId')

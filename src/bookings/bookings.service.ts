@@ -14,6 +14,7 @@ import {
   StopType,
   VehicleStatus,
 } from '../generated/prisma/enums.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { PricingQuoteGateway } from '../pricing/pricing-quote.gateway.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
@@ -107,6 +108,47 @@ export class BookingsService {
     // Quote preview does not reserve capacity. #14 adds a signed, expiring quote
     // context for tamper-resistant booking submission.
     return { currency: 'PHP', totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, pricingMode: quote.modelVersion };
+  }
+
+  async issueQuote(customerUserId: string, dto: CreateBookingDto) {
+    this.validateCreateRequest(dto);
+    const selection = await this.validateBookingSelections(dto);
+    const routeStops = selection.stops ?? dto.stops!;
+    const quote = await this.pricingQuoteGateway.quote({ bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime), passengerCount: dto.passengerCount, stops: routeStops.map((stop) => ({ stopType: stop.stopType, latitude: stop.latitude, longitude: stop.longitude })), tourPackageBasePrice: selection.tourPackageBasePrice, tourPackageDurationMinutes: selection.tourPackageDurationMinutes });
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    // DTO instances are not Prisma JSON values. Serialize only the validated
+    // request snapshot so it is stable across class-transformer boundaries.
+    const requestSnapshot = JSON.parse(JSON.stringify({ ...dto, stops: routeStops })) as Prisma.InputJsonObject;
+    const stored = await this.prisma.bookingQuote.create({ data: { customerUserId, bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, tourPackageId: dto.tourPackageId, requestSnapshot, pricingConfigId: quote.pricingConfigurationId, totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt } });
+    return { quoteId: stored.id, currency: 'PHP', totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt, pricingMode: quote.modelVersion };
+  }
+
+  async submitQuote(customerUserId: string, command: { quoteId: string; idempotencyKey: string }) {
+    const existing = await this.prisma.booking.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
+    if (existing) return existing;
+    const quote = await this.prisma.bookingQuote.findFirst({ where: { id: command.quoteId, customerUserId, consumedAt: null, expiresAt: { gt: new Date() } }, include: { pricingConfiguration: true } });
+    if (!quote) throw new BadRequestException('Quote is expired, consumed, or unavailable');
+    const snapshot = quote.requestSnapshot as unknown as CreateBookingDto;
+    // Recheck availability immediately before durable consumption. The stored
+    // quote price remains immutable even when configuration changes later.
+    this.validateCreateRequest(snapshot);
+    await this.validateBookingSelections(snapshot);
+    const stops = snapshot.stops ?? [];
+    return this.prisma.$transaction(async (tx) => {
+      const retry = await tx.booking.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
+      if (retry) return retry;
+      // Claim before writing the booking so only one request can consume a quote.
+      // A failed transaction rolls this claim back with the booking write.
+      const claimed = await tx.bookingQuote.updateMany({
+        where: { id: quote.id, customerUserId, consumedAt: null, expiresAt: { gt: new Date() } },
+        data: { consumedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('Quote is expired, consumed, or unavailable');
+      const booking = await tx.booking.create({ data: { customerUserId, idempotencyKey: command.idempotencyKey, vehicleTypeId: snapshot.vehicleTypeId, bookingType: snapshot.bookingType, tourPackageId: snapshot.tourPackageId, startDatetime: new Date(snapshot.startDatetime), endDatetime: new Date(snapshot.endDatetime), passengerCount: snapshot.passengerCount, bookingStatus: BookingStatus.AWAITING_PAYMENT, totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, notes: snapshot.notes, stops: { create: stops.map((stop: any, index) => ({ sequenceNumber: index + 1, stopType: stop.stopType, locationName: stop.locationName, formattedAddress: stop.formattedAddress, latitude: stop.latitude, longitude: stop.longitude, activity: stop.activity, plannedStopMinutes: stop.plannedStopMinutes })) }, pricingCalculations: { create: { pricingConfigId: quote.pricingConfigId, baseRateUsed: quote.pricingConfiguration.baseRate, distanceKm: quote.totalDistanceKm, tripDurationMinutes: quote.estimatedDurationMinutes, bookingDemandCount: 0, vehicleAvailability: 0, driverAvailability: 0, suggestedAmount: quote.finalQuotedPrice, adjustmentPercentage: 0, modelVersion: 'admin-fixed-v1' } } } });
+      await tx.bookingQuote.update({ where: { id: quote.id }, data: { bookingId: booking.id } });
+      await tx.bookingTransition.create({ data: { bookingId: booking.id, actorUserId: customerUserId, previousState: BookingStatus.DRAFT, nextState: BookingStatus.AWAITING_PAYMENT, reason: 'Customer accepted server-issued quote' } });
+      return booking;
+    });
   }
 
   private validateCreateRequest(dto: CreateBookingDto) {
