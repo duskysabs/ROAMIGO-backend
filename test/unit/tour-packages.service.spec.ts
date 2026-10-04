@@ -44,7 +44,7 @@ describe('TourPackagesService', () => {
   });
 
   it('rejects malformed package routes before persistence', async () => {
-    await expect(service.create('admin-user-id', { packageName: 'Invalid', description: 'Description', basePrice: 1200, estimatedDurationMinutes: 240, stops: [...stops].reverse() })).rejects.toBeInstanceOf(BadRequestException);
+    expect(() => service.create('admin-user-id', { packageName: 'Invalid', description: 'Description', basePrice: 1200, estimatedDurationMinutes: 240, stops: [...stops].reverse() })).toThrow(BadRequestException);
     expect(create).not.toHaveBeenCalled();
   });
 
