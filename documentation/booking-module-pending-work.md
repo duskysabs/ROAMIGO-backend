@@ -24,3 +24,17 @@ vehicle, or assign a driver.
 eligible vehicle-driver pair, receives a backend-controlled price quote, and
 stores the booking as `AWAITING_PAYMENT`. It creates no payment, reservation,
 or assignment.
+
+## Master-data API boundary
+
+The tour-package module owns package records and ordered stops. Administrators
+create packages inactive, then explicitly activate them after review. Public
+catalog reads return only active packages, while Staff and Administrators can
+read the operational catalog. Replacing a package route is atomic and does not
+rewrite booking stop snapshots.
+
+`VehicleType.vehicleType` remains a fixed database enum. Administrators may
+create records for supported values, but cannot introduce an arbitrary vehicle
+classification without a reviewed schema migration. Durable administrative
+audit history and a vehicle-type active lifecycle also need schema support;
+they must not be represented by application-only placeholder behavior.
