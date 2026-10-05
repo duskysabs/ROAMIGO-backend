@@ -11,15 +11,17 @@
 
 ## Quote preview
 
-`POST /bookings/quote` accepts the same route and schedule inputs as booking
-submission. The server validates the route shape, active package, vehicle type,
+`POST /bookings/quote` accepts the schedule and booking inputs. Custom Trips
+submit ordered Geoapify place IDs, which the server resolves and routes before
+pricing. The server validates the route shape, active package, vehicle type,
 and advisory fleet eligibility before using the pricing boundary. The response
 contains PHP amount, duration, distance, and pricing mode. A preview does not
 reserve capacity or permit a client to choose the accepted price.
 
-The current deterministic MVP reports `0.00` distance until Geoapify supplies
-authoritative route metrics. A successful response includes a server-issued
-quote ID and a ten-minute expiry. It does not reserve capacity.
+For Custom Trips, Geoapify supplies the authoritative route distance and
+duration used in the quote response and retained as quote evidence. A
+successful response includes a server-issued quote ID and a ten-minute expiry.
+It does not reserve capacity.
 
 ## Customer bookings
 

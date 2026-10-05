@@ -35,15 +35,18 @@ rate. Tour packages use the stored package base price plus that fixed vehicle
 rate. The booking stores the selected configuration and calculation snapshot in
 the same transaction, so later price changes do not rewrite accepted bookings.
 
-This is a demo fallback, not route-based pricing. It reports zero route
-distance until the Geoapify integration provides authoritative metrics. FastAPI
-RFR pricing and payment confirmation remain separate follow-up work.
+This is a demo fallback, not dynamic route-priced pricing. For Custom Trips,
+Geoapify now supplies the authoritative route distance and duration retained
+with the quote, while the Admin-controlled fixed price remains the amount
+shown to the customer. FastAPI RFR pricing and payment confirmation remain
+separate follow-up work.
 
 ## Quote and lifecycle boundary
 
-The durable quote stores the validated request snapshot and price evidence, so
-the customer cannot submit a client-modified amount or route after reviewing a
-quote. A quote is consumed at most once and is bound to the created booking.
+The durable quote stores the validated request snapshot, price evidence, and
+for Custom Trips the server-resolved Geoapify route evidence, so the customer
+cannot submit a client-modified amount or route after reviewing a quote. A
+quote is consumed at most once and is bound to the created booking.
 The submission transaction records the initial `DRAFT` to
 `AWAITING_PAYMENT` transition. This is lifecycle evidence for the demo flow,
 not the complete transition policy. Booking Review, payment confirmation,

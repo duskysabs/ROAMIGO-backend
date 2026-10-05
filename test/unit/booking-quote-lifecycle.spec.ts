@@ -26,7 +26,7 @@ describe('BookingsService quote lifecycle', () => {
       booking: { findUnique: vi.fn().mockResolvedValue(existing) },
       bookingQuote: { findFirst: vi.fn() },
     };
-    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never);
+    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never, {} as never);
 
     await expect(service.submitQuote('00000000-0000-4000-8000-000000000103', command)).resolves.toBe(existing);
     expect(prisma.bookingQuote.findFirst).not.toHaveBeenCalled();
@@ -37,7 +37,7 @@ describe('BookingsService quote lifecycle', () => {
       booking: { findUnique: vi.fn().mockResolvedValue(null) },
       bookingQuote: { findFirst: vi.fn().mockResolvedValue(null) },
     };
-    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never);
+    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never, {} as never);
 
     await expect(service.submitQuote('00000000-0000-4000-8000-000000000103', command)).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -72,7 +72,7 @@ describe('BookingsService quote lifecycle', () => {
       },
       $transaction: transaction,
     };
-    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never);
+    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never, {} as never);
     // The persisted quote was already validated at issuance. This test isolates
     // durable consumption and transition evidence from availability queries.
     (service as any).validateBookingSelections = vi.fn().mockResolvedValue({});

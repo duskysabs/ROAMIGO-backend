@@ -454,6 +454,7 @@ model BookingQuote {
   vehicleTypeId        String      @db.Uuid @map("vehicle_type_id")
   tourPackageId        String?     @db.Uuid @map("tour_package_id")
   requestSnapshot      Json        @map("request_snapshot") @db.JsonB
+  routeEvidence        Json?       @map("route_evidence") @db.JsonB
   pricingConfigId      String      @db.Uuid @map("pricing_config_id")
   totalDistanceKm      Decimal     @db.Decimal(12, 2) @map("total_distance_km")
   estimatedDurationMinutes Int     @map("estimated_duration_minutes")

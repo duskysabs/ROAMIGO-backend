@@ -11,6 +11,8 @@ export type PricingQuoteInput = {
   stops: Array<{ stopType: StopType; latitude: number; longitude: number }>;
   tourPackageBasePrice?: string;
   tourPackageDurationMinutes?: number;
+  routeDistanceKm?: string;
+  routeDurationMinutes?: number;
 };
 
 export type PricingQuote = {
@@ -42,7 +44,7 @@ export class AdminPricingQuoteGateway extends PricingQuoteGateway {
     const baseRate = Number(configuration.baseRate);
     const packagePrice = input.bookingType === BookingType.TOUR_PACKAGE ? Number(input.tourPackageBasePrice) : 0;
     const finalPrice = packagePrice + baseRate;
-    const duration = input.tourPackageDurationMinutes ?? Math.round((input.endDatetime.getTime() - input.startDatetime.getTime()) / 60000);
-    return { totalDistanceKm: '0.00', estimatedDurationMinutes: duration, finalQuotedPrice: finalPrice.toFixed(2), pricingConfigurationId: configuration.id, baseRateUsed: baseRate.toFixed(2), adjustmentPercentage: '0.00', modelVersion: 'admin-fixed-v1' };
+    const duration = input.routeDurationMinutes ?? input.tourPackageDurationMinutes ?? Math.round((input.endDatetime.getTime() - input.startDatetime.getTime()) / 60000);
+    return { totalDistanceKm: input.routeDistanceKm ?? '0.00', estimatedDurationMinutes: duration, finalQuotedPrice: finalPrice.toFixed(2), pricingConfigurationId: configuration.id, baseRateUsed: baseRate.toFixed(2), adjustmentPercentage: '0.00', modelVersion: 'admin-fixed-v1' };
   }
 }

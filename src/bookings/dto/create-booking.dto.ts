@@ -20,6 +20,9 @@ export class CreateBookingDto {
   @IsDateString() endDatetime: string;
   @IsInt() @Min(1) passengerCount: number;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
+  // Custom Trips submit Geoapify place IDs. The server resolves and routes
+  // them before issuing a quote, so route metrics never come from the client.
+  @IsOptional() @IsArray() @ArrayMinSize(2) @IsString({ each: true }) @MaxLength(500, { each: true }) routePlaceIds?: string[];
   // Required for Custom Trips only; Tour Package routes are loaded server-side.
   @IsOptional() @IsArray() @ArrayMinSize(2) @ValidateNested({ each: true }) @Type(() => CreateBookingStopDto) stops?: CreateBookingStopDto[];
 }
