@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { BookingsService } from '../../src/bookings/bookings.service.js';
 import { PricingQuoteGateway } from '../../src/pricing/pricing-quote.gateway.js';
+import { RoutingService } from '../../src/routing/routing.service.js';
 import {
   AssignmentStatus,
   BookingStatus,
@@ -24,6 +25,8 @@ describe('BookingsService', () => {
   const findVehicleType = vi.fn();
   const findCapacityMatch = vi.fn();
   const findTourPackage = vi.fn();
+  const createBookingQuote = vi.fn();
+  const previewRoute = vi.fn();
   const bookingRead = {
     id: 'booking-id', bookingType: BookingType.CUSTOM_TRIP, bookingStatus: BookingStatus.AWAITING_PAYMENT,
     startDatetime: new Date('2026-10-08T08:00:00Z'), endDatetime: new Date('2026-10-08T10:00:00Z'), passengerCount: 2,
@@ -44,12 +47,14 @@ describe('BookingsService', () => {
             vehicleType: { findUnique: findVehicleType },
             vehicle: { findFirst: findCapacityMatch },
             tourPackage: { findUnique: findTourPackage },
+            bookingQuote: { create: createBookingQuote },
           },
         },
         {
           provide: PricingQuoteGateway,
           useValue: { quote },
         },
+        { provide: RoutingService, useValue: { preview: previewRoute } },
       ],
     }).compile();
 
@@ -153,6 +158,67 @@ describe('BookingsService', () => {
     );
     expect(quote).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('issues a Custom Trip quote from server-resolved route evidence', async () => {
+    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id' });
+    findCapacityMatch.mockResolvedValue({ id: 'vehicle-id' });
+    previewRoute.mockResolvedValue({
+      provider: 'geoapify',
+      totalDistanceKm: '12.35',
+      estimatedDurationMinutes: 62,
+      geometry: { type: 'MultiLineString', coordinates: [] },
+      stops: [
+        { placeId: 'pickup-place', formattedAddress: 'Pickup address', latitude: 10.1, longitude: 123.1 },
+        { placeId: 'dropoff-place', formattedAddress: 'Dropoff address', latitude: 10.2, longitude: 123.2 },
+      ],
+    });
+    quote.mockResolvedValue({
+      totalDistanceKm: '12.35',
+      estimatedDurationMinutes: 62,
+      finalQuotedPrice: '1200.00',
+      pricingConfigurationId: 'pricing-config-id',
+      baseRateUsed: '1200.00',
+      adjustmentPercentage: '0.00',
+      modelVersion: 'admin-fixed-v1',
+    });
+    createBookingQuote.mockResolvedValue({ id: 'quote-id' });
+
+    await expect(bookingsService.issueQuote('customer-id', {
+      vehicleTypeId: '00000000-0000-4000-8000-000000000002',
+      bookingType: BookingType.CUSTOM_TRIP,
+      startDatetime: '2026-10-01T09:00:00.000Z',
+      endDatetime: '2026-10-01T10:30:00.000Z',
+      passengerCount: 2,
+      routePlaceIds: ['pickup-place', 'dropoff-place'],
+    } as never)).resolves.toEqual(expect.objectContaining({
+      quoteId: 'quote-id',
+      totalDistanceKm: '12.35',
+      estimatedDurationMinutes: 62,
+    }));
+
+    expect(previewRoute).toHaveBeenCalledWith({
+      placeIds: ['pickup-place', 'dropoff-place'],
+    });
+    expect(quote).toHaveBeenCalledWith(expect.objectContaining({
+      routeDistanceKm: '12.35',
+      routeDurationMinutes: 62,
+      stops: [
+        { stopType: StopType.PICKUP, latitude: 10.1, longitude: 123.1 },
+        { stopType: StopType.DROPOFF, latitude: 10.2, longitude: 123.2 },
+      ],
+    }));
+    expect(createBookingQuote).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        routeEvidence: expect.objectContaining({ provider: 'geoapify', totalDistanceKm: '12.35' }),
+        requestSnapshot: expect.objectContaining({
+          stops: [
+            expect.objectContaining({ stopType: StopType.PICKUP, formattedAddress: 'Pickup address' }),
+            expect.objectContaining({ stopType: StopType.DROPOFF, formattedAddress: 'Dropoff address' }),
+          ],
+        }),
+      }),
+    }));
   });
 
   it('prices and creates a valid custom-trip booking with ordered stops', async () => {

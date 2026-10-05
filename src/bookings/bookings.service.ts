@@ -18,12 +18,14 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { PricingQuoteGateway } from '../pricing/pricing-quote.gateway.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
+import { RoutingService } from '../routing/routing.service.js';
 
 @Injectable()
 export class BookingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pricingQuoteGateway: PricingQuoteGateway,
+    private readonly routing: RoutingService,
   ) {}
 
   /** Validates, prices, and persists a customer booking with its route stops. */
@@ -113,14 +115,32 @@ export class BookingsService {
   async issueQuote(customerUserId: string, dto: CreateBookingDto) {
     this.validateCreateRequest(dto);
     const selection = await this.validateBookingSelections(dto);
-    const routeStops = selection.stops ?? dto.stops!;
-    const quote = await this.pricingQuoteGateway.quote({ bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime), passengerCount: dto.passengerCount, stops: routeStops.map((stop) => ({ stopType: stop.stopType, latitude: stop.latitude, longitude: stop.longitude })), tourPackageBasePrice: selection.tourPackageBasePrice, tourPackageDurationMinutes: selection.tourPackageDurationMinutes });
+    const routePreview = dto.bookingType === BookingType.CUSTOM_TRIP
+      ? await this.routeCustomTrip(dto)
+      : null;
+    const routeStops = routePreview?.stops ?? selection.stops ?? dto.stops!;
+    const quote = await this.pricingQuoteGateway.quote({ bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime), passengerCount: dto.passengerCount, stops: routeStops.map((stop) => ({ stopType: stop.stopType, latitude: stop.latitude, longitude: stop.longitude })), tourPackageBasePrice: selection.tourPackageBasePrice, tourPackageDurationMinutes: selection.tourPackageDurationMinutes, routeDistanceKm: routePreview?.totalDistanceKm, routeDurationMinutes: routePreview?.estimatedDurationMinutes });
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     // DTO instances are not Prisma JSON values. Serialize only the validated
     // request snapshot so it is stable across class-transformer boundaries.
     const requestSnapshot = JSON.parse(JSON.stringify({ ...dto, stops: routeStops })) as Prisma.InputJsonObject;
-    const stored = await this.prisma.bookingQuote.create({ data: { customerUserId, bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, tourPackageId: dto.tourPackageId, requestSnapshot, pricingConfigId: quote.pricingConfigurationId, totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt } });
+    const stored = await this.prisma.bookingQuote.create({ data: { customerUserId, bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, tourPackageId: dto.tourPackageId, requestSnapshot, routeEvidence: routePreview ? JSON.parse(JSON.stringify(routePreview)) as Prisma.InputJsonObject : undefined, pricingConfigId: quote.pricingConfigurationId, totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt } });
     return { quoteId: stored.id, currency: 'PHP', totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt, pricingMode: quote.modelVersion };
+  }
+
+  private async routeCustomTrip(dto: CreateBookingDto) {
+    if (!dto.routePlaceIds) throw new BadRequestException('Custom Trip quotes require ordered location selections');
+    const preview = await this.routing.preview({ placeIds: dto.routePlaceIds });
+    return {
+      ...preview,
+      stops: preview.stops.map((stop, index) => ({
+        stopType: index === 0 ? StopType.PICKUP : index === preview.stops.length - 1 ? StopType.DROPOFF : StopType.INTERMEDIATE,
+        locationName: stop.formattedAddress,
+        formattedAddress: stop.formattedAddress,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+      })),
+    };
   }
 
   async submitQuote(customerUserId: string, command: { quoteId: string; idempotencyKey: string }) {
@@ -171,6 +191,10 @@ export class BookingsService {
     if (dto.bookingType === BookingType.TOUR_PACKAGE) {
       return;
     }
+
+    // Place IDs are resolved and ordered by the routing boundary before quote
+    // issuance. Do not require the legacy client-coordinate stop payload.
+    if (dto.routePlaceIds) return;
 
     const stops = dto.stops ?? [];
     if (stops[0]?.stopType !== StopType.PICKUP || stops.at(-1)?.stopType !== StopType.DROPOFF) {
