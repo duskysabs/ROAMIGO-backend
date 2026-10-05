@@ -12,6 +12,7 @@ import {
   VehicleStatus,
   VehicleTypeName,
 } from '../src/generated/prisma/enums.js';
+import { GeoapifyClient } from '../src/geoapify/geoapify.client.js';
 
 // This command is intentionally limited to synthetic, non-production booking
 // demo records. It does not create Supabase Auth users or expose an HTTP path.
@@ -23,6 +24,7 @@ const requiredEnvironment = [
   'DEMO_DRIVER_LAST_NAME',
   'DEMO_DRIVER_LICENSE_NUMBER',
   'DEMO_VEHICLE_PLATE_NUMBER',
+  'DEMO_CUSTOM_TRIP_PLACE_IDS',
 ] as const;
 
 const DEMO_PACKAGE_NAME = 'DEMO Booking Flow Package';
@@ -43,6 +45,17 @@ function assertSafeEnvironment() {
     throw new Error('ALLOW_DEMO_BOOKING_SETUP must be set to true');
   }
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+  if (process.env.GEOAPIFY_ENABLED !== 'true' || !process.env.GEOAPIFY_API_KEY?.trim()) {
+    throw new Error('GEOAPIFY_ENABLED=true and GEOAPIFY_API_KEY are required for the route-backed demo');
+  }
+}
+
+function readDemoPlaceIds(value: string) {
+  const placeIds = value.split(',').map((placeId) => placeId.trim()).filter(Boolean);
+  if (placeIds.length < 2) {
+    throw new Error('DEMO_CUSTOM_TRIP_PLACE_IDS must contain at least two comma-separated Geoapify place IDs');
+  }
+  return placeIds;
 }
 
 async function setupDemoBookingData() {
@@ -55,7 +68,17 @@ async function setupDemoBookingData() {
     driverLastName,
     driverLicenseNumber,
     vehiclePlateNumber,
+    customTripPlaceIds,
   ] = requiredEnvironment.map(readRequiredEnvironment);
+  const demoPlaceIds = readDemoPlaceIds(customTripPlaceIds);
+  // Resolve and route the synthetic itinerary before changing demo data. This
+  // prevents a setup run from reporting a usable Custom Trip when Geoapify is
+  // unavailable or the configured place IDs are stale.
+  const geoapify = new GeoapifyClient();
+  const resolvedDemoStops = await Promise.all(demoPlaceIds.map((placeId) => geoapify.placeDetails(placeId)));
+  const demoRoute = await geoapify.route(resolvedDemoStops);
+  const routeDistanceKm = (demoRoute.distanceMeters / 1000).toFixed(2);
+  const routeDurationMinutes = Math.ceil(demoRoute.durationSeconds / 60);
   const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
   });
@@ -252,7 +275,17 @@ async function setupDemoBookingData() {
       pricingConfigurationId: pricingConfiguration.id,
       expectedCustomTripPricePhp: DEMO_VEHICLE_RATE.toFixed(2),
       expectedTourPackagePricePhp: (DEMO_PACKAGE_BASE_PRICE + DEMO_VEHICLE_RATE).toFixed(2),
-      routeDistanceKm: '0.00',
+      customTrip: {
+        placeIds: demoPlaceIds,
+        resolvedStops: resolvedDemoStops.map((stop) => ({
+          formattedAddress: stop.formattedAddress,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        })),
+        provider: 'geoapify',
+        routeDistanceKm,
+        routeDurationMinutes,
+      },
     }, null, 2));
   } finally {
     await prisma.$disconnect();

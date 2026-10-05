@@ -24,7 +24,7 @@ service-unavailable response instead of pretending that route data is valid.
 ## Boundary
 
 The route preview is server-calculated and preserves the caller's stop order.
-It is not a booking reservation or an accepted booking quote. The booking flow
-continues to use the deterministic pricing fallback until a follow-up binds
-route evidence to quote issuance and replaces the temporary `0.00` pricing
-distance behavior.
+It is not a booking reservation or an accepted booking quote. Custom Trip
+quote issuance reuses this boundary and persists the resolved Geoapify route
+as quote evidence. The deterministic pricing fallback remains fixed-price, so
+route metrics do not yet alter the customer-facing amount.
