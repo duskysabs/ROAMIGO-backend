@@ -49,16 +49,16 @@ Use a non-production Supabase project and redacted fixture data.
 
 | ID | Scenario | Expected result | Current evidence |
 | --- | --- | --- | --- |
-| BKG-01 | Customer lists own bookings | Only bookings owned by the authenticated customer are returned | Automated unit coverage |
-| BKG-02 | Customer reads another customer's booking ID | `404 Not Found` | Automated unit coverage |
+| BKG-01 | Customer lists own bookings | Only bookings owned by the authenticated customer are returned | Automated unit coverage and non-production Postman rehearsal on 2026-10-05 |
+| BKG-02 | Customer reads another customer's booking ID | `404 Not Found` | Automated unit coverage and non-production Postman rehearsal on 2026-10-05 |
 | BKG-03 | Custom route validation | Exactly one pickup and one drop-off, in valid order | Automated unit coverage |
 | BKG-04 | Package booking with inactive or incomplete package | Request is rejected | Automated unit coverage |
-| BKG-05 | No matching available driver and vehicle | Request is rejected and no booking is created | Automated unit coverage |
-| BKG-06 | Customer requests a quote | Server stores a validated snapshot, returns a quote ID, and expires it after ten minutes without reserving capacity | Automated unit coverage required |
-| BKG-07 | Customer submits a valid quote | Atomically claims one unexpired quote, creates `AWAITING_PAYMENT`, and records the initial transition | Automated unit coverage with mocked persistence |
-| BKG-08 | Customer retries a submission with the same idempotency key | Returns the original booking without consuming another quote or creating a duplicate | Automated unit coverage |
-| BKG-09 | Customer submits an expired, consumed, or other-customer quote | Request is rejected without a booking | Automated unit coverage |
-| BKG-10 | Real MVP booking request | Uses one active effective Admin configuration and persists `AWAITING_PAYMENT` with calculation and transition evidence | Manual API verification required |
+| BKG-05 | No matching available driver and vehicle | Request is rejected and no booking is created | Automated unit coverage and non-production Postman rehearsal on 2026-10-05 |
+| BKG-06 | Customer requests a quote | Server stores a validated snapshot, returns a quote ID, and expires it after ten minutes without reserving capacity | Automated coverage and non-production Custom Trip and Tour Package rehearsal on 2026-10-05 |
+| BKG-07 | Customer submits a valid quote | Atomically claims one unexpired quote, creates `AWAITING_PAYMENT`, and records the initial transition | Automated coverage and non-production Custom Trip and Tour Package rehearsal on 2026-10-05 |
+| BKG-08 | Customer retries a submission with the same idempotency key | Returns the original booking without consuming another quote or creating a duplicate | Automated coverage and non-production rehearsal on 2026-10-05 |
+| BKG-09 | Customer submits an expired, consumed, or other-customer quote | Request is rejected without a booking | Automated coverage and non-production rehearsal on 2026-10-05 |
+| BKG-10 | Real MVP booking request | Uses one active effective Admin configuration and persists `AWAITING_PAYMENT` with calculation and transition evidence | Non-production Postman rehearsal on 2026-10-05 |
 
 ## Deferred workflow boundaries
 
@@ -66,7 +66,7 @@ Use a non-production Supabase project and redacted fixture data.
 | --- | --- | --- | --- |
 | PAY-01 | Payment intent or verified manual payment | Payment is recorded and booking may advance only after verification | Not implemented |
 | ASN-01 | Post-payment assignment | Rechecks availability transactionally and prevents schedule overlaps | Not implemented |
-| GEO-01 | Geoapify route-backed booking quote | Server resolves ordered place IDs, persists the provider route evidence, and does not issue a quote if routing fails | Automated unit coverage for quote binding, live provider check required when enabled |
+| GEO-01 | Geoapify route-backed booking quote | Server resolves ordered place IDs, persists the provider route evidence, and does not issue a quote if routing fails | Automated unit coverage and non-production Geoapify rehearsal on 2026-10-05 |
 | GEO-02 | Location autocomplete and place resolution | Server returns normalized locations without exposing the provider key | Automated service coverage, live provider check required when enabled |
 | GEO-03 | Ordered route preview | Server resolves place IDs in supplied order and returns provider distance, duration, and geometry | Automated service coverage, live provider check required when enabled |
 | AUD-01 | Master-data change audit | Actor, timestamp, reason, and before/after values persist | Requires schema work |

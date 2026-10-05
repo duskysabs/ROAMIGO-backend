@@ -35,6 +35,10 @@ identities and records. The demonstrated terminal state is
    The Customer must have an active `CUSTOMER` profile before booking data is
    prepared.
 
+5. Configure Geoapify for the non-production backend. The setup command
+   validates the provider route before it writes demo records, so a disabled
+   provider, missing key, or stale place ID stops the rehearsal early.
+
 ## Setup
 
 Set these values only in a local, untracked environment file:
@@ -48,6 +52,9 @@ DEMO_DRIVER_FIRST_NAME=Demo
 DEMO_DRIVER_LAST_NAME=Driver
 DEMO_DRIVER_LICENSE_NUMBER=<synthetic unique licence value>
 DEMO_VEHICLE_PLATE_NUMBER=<synthetic unique plate value>
+DEMO_CUSTOM_TRIP_PLACE_IDS=<pickup-place-id>,<dropoff-place-id>
+GEOAPIFY_ENABLED=true
+GEOAPIFY_API_KEY=<server-side non-production key>
 ```
 
 Then run:
@@ -65,19 +72,45 @@ The command verifies the Admin and Customer profiles, then creates or restores:
 - exactly one active `VAN` deterministic pricing configuration owned by the
   configured Admin.
 
-The command prints the redacted fixture identifiers required for requests. It
-fails rather than modifying a conflicting active VAN pricing configuration.
+The command resolves and routes the configured synthetic place IDs before it
+creates or updates database records. It prints the fixture identifiers,
+resolved synthetic stops, provider, expected distance, and expected duration
+required for the rehearsal. It fails rather than modifying a conflicting
+active VAN pricing configuration or pretending routing is available.
 
 ## Expected pricing
 
 | Scenario | Expected amount | Distance | Duration |
 | --- | ---: | ---: | --- |
-| Custom Trip | PHP 1200.00 | `0.00` km | Request schedule duration |
+| Custom Trip | PHP 1200.00 | Geoapify distance printed by setup | Geoapify duration printed by setup |
 | Tour Package | PHP 3700.00 | `0.00` km | 180 minutes |
 
-The zero distance is the deliberate deterministic-price fallback. Geoapify is
-not yet integrated, so do not claim these coordinates represent a calculated
-route or provider-confirmed travel time.
+The deterministic Admin price remains the amount shown for the Custom Trip.
+Geoapify provides route distance and duration as quote evidence, but it does
+not yet change the fixed demo price.
+
+## Postman environment
+
+Use a local Postman environment with these variables. Do not export a real
+access token, API key, or database URL with the collection.
+
+| Variable | Source |
+| --- | --- |
+| `baseUrl` | Non-production NestJS base URL, for example `http://localhost:3000` |
+| `customerAccessToken` | Synthetic Customer login response |
+| `vehicleTypeId` | Setup command output |
+| `pickupPlaceId` | First setup command `customTrip.placeIds` value |
+| `dropoffPlaceId` | Last setup command `customTrip.placeIds` value |
+| `expectedRouteDistanceKm` | Setup command output |
+| `expectedRouteDurationMinutes` | Setup command output |
+| `quoteId` | Quote response, set only for the current rehearsal |
+| `idempotencyKey` | A fresh unique value for each rehearsal |
+
+Before setup, use `GET {{baseUrl}}/locations/autocomplete?text=<synthetic
+location text>` to obtain valid non-production place IDs. Store the chosen
+pickup and drop-off IDs in `DEMO_CUSTOM_TRIP_PLACE_IDS` before running the
+setup command. The returned normalized locations must be synthetic demo
+locations, never a customer's address.
 
 ## Rehearsal: happy path
 
@@ -90,13 +123,32 @@ route or provider-confirmed travel time.
    GET /tour-packages
    ```
 
-3. Request a Custom Trip quote with the printed `vehicleTypeId`, a future
-   two-hour interval, two passengers, and a Pickup then Dropoff route. Use
-   synthetic labels and coordinates from the `DEMO` package, not real customer
-   locations.
+3. Send `POST {{baseUrl}}/bookings/quote` with
+   `Authorization: Bearer {{customerAccessToken}}`, the printed
+   `vehicleTypeId`, a future two-hour interval, two passengers, and the
+   `placeIds` printed by setup. Do not send client-generated addresses,
+   coordinates, distance, duration, or price.
+
+   ```json
+   {
+     "vehicleTypeId": "<printed VAN vehicle type UUID>",
+     "bookingType": "CUSTOM_TRIP",
+     "startDatetime": "<future ISO timestamp>",
+     "endDatetime": "<later future ISO timestamp>",
+     "passengerCount": 2,
+     "routePlaceIds": ["<printed pickup place ID>", "<printed dropoff place ID>"]
+   }
+   ```
+
 4. Confirm the response returns a `quoteId`, `expiresAt`, `PHP`, `1200.00`,
-   and `0.00` distance.
-5. Submit the quote within ten minutes:
+   and the distance and duration printed by setup.
+
+   Save the response `quoteId` to the Postman `quoteId` variable. A Postman
+   test may also assert that `totalDistanceKm` equals
+   `{{expectedRouteDistanceKm}}` and `estimatedDurationMinutes` equals
+   `{{expectedRouteDurationMinutes}}`.
+5. Within ten minutes, send `POST {{baseUrl}}/bookings` with
+   `Authorization: Bearer {{customerAccessToken}}`:
 
    ```json
    {
@@ -145,4 +197,28 @@ response evidence in the pull request or issue:
 - booking response at `AWAITING_PAYMENT`;
 - idempotent retry response;
 - expected invalid-schedule or expired-quote response;
-- known limitation that routing is not Geoapify-backed yet.
+- known limitation that the deterministic Admin price does not yet vary with
+  route distance or duration.
+
+## Recorded non-production rehearsal
+
+**Date:** October 5, 2026
+
+- The route-evidence migration was applied and Prisma reported the database
+  schema up to date.
+- The synthetic demo setup resolved the configured Geoapify route successfully
+  and reported 9.25 km with an estimated duration of 13 minutes at setup time.
+- A Custom Trip quote returned PHP 1200.00, route metrics from Geoapify, and a
+  ten-minute expiry. Its accepted booking was stored as `AWAITING_PAYMENT`.
+- A Tour Package quote returned PHP 3700.00, 180 minutes, and copied the three
+  approved package stops into an `AWAITING_PAYMENT` booking.
+- The customer booking list and detail endpoints returned only server-owned
+  status, pricing, and stop data.
+- The idempotency retry returned the original booking rather than creating a
+  duplicate.
+- Invalid schedule, unsupported passenger capacity, client price injection,
+  expired quote, and cross-customer detail access each returned the expected
+  rejection response.
+
+This evidence applies only to the non-production rehearsal. It does not prove
+payment, reservation, assignment, dispatch, or production readiness.
