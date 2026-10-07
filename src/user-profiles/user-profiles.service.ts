@@ -40,20 +40,34 @@ export class UserProfilesService {
             throw new ConflictException('Profile already exists');
         }
 
-        return this.prisma.userProfile.create({
-            data: {
-                userId,
-                firstName: dto.firstName,
-                lastName: dto.lastName,
-                birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
-                homeAddress: dto.homeAddress,
-                role: UserRole.CUSTOMER,
-                accountStatus: AccountStatus.ACTIVE,
-                customer: {
-                    create: {},
+        try {
+            return await this.prisma.userProfile.create({
+                data: {
+                    userId,
+                    firstName: dto.firstName,
+                    lastName: dto.lastName,
+                    phoneNumber: dto.phoneNumber,
+                    birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
+                    homeAddress: dto.homeAddress,
+                    role: UserRole.CUSTOMER,
+                    accountStatus: AccountStatus.ACTIVE,
+                    customer: {
+                        create: {},
+                    },
                 },
-            },
-        });
+            });
+        } catch (error) {
+            if (
+                typeof error === 'object' &&
+                error !== null &&
+                'code' in error &&
+                error.code === 'P2002'
+            ) {
+                throw new ConflictException('Profile already exists');
+            }
+
+            throw error;
+        }
     }
 
     async updateProfile(userId: string, dto: UpdateProfileDto){
@@ -70,6 +84,7 @@ export class UserProfilesService {
             data: {
                 firstName: dto.firstName,
                 lastName: dto.lastName,
+                phoneNumber: dto.phoneNumber,
                 birthDate:
                     dto.birthDate === undefined 
                     ? undefined
