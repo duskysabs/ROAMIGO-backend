@@ -8,6 +8,7 @@ import type { AuthenticatedRequest } from '../../src/auth/guards/supabase-auth.g
 describe('AuthController', () => {
   let authController: AuthController;
 
+  const signUp = vi.fn();
   const login = vi.fn();
 
   beforeEach(async () => {
@@ -19,6 +20,7 @@ describe('AuthController', () => {
         {
           provide: AuthService,
           useValue: {
+            signUp,
             login,
           },
         },
@@ -29,6 +31,23 @@ describe('AuthController', () => {
       .compile();
 
     authController = module.get<AuthController>(AuthController);
+  });
+
+  it('forwards signup data to AuthService', async () => {
+    const signUpDto = {
+      email: 'test@example.com',
+      password: 'test-password',
+    };
+    const expectedResult = {
+      requiresProfile: true,
+      nextStep: 'COMPLETE_PROFILE',
+    };
+    signUp.mockResolvedValue(expectedResult);
+
+    await expect(authController.signUp(signUpDto)).resolves.toEqual(
+      expectedResult,
+    );
+    expect(signUp).toHaveBeenCalledWith(signUpDto);
   });
 
   it('forwards login data to AuthService', async () => {

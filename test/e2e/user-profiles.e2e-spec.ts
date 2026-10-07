@@ -79,7 +79,11 @@ describe('User profile authorization', () => {
     await request(app.getHttpServer())
       .post('/user-profiles/me/complete')
       .set('Authorization', 'Bearer new-customer-token')
-      .send({ firstName: 'New', lastName: 'Customer' })
+      .send({
+        firstName: 'New',
+        lastName: 'Customer',
+        phoneNumber: '+639171234567',
+      })
       .expect(HttpStatus.CREATED)
       .expect({ userId: 'new-customer-id', role: UserRole.CUSTOMER });
 
@@ -87,16 +91,56 @@ describe('User profile authorization', () => {
     expect(completeCustomerProfile).toHaveBeenCalledWith('new-customer-id', {
       firstName: 'New',
       lastName: 'Customer',
+      phoneNumber: '+639171234567',
     });
   });
 
   it('rejects profile completion without a valid access token', async () => {
     await request(app.getHttpServer())
       .post('/user-profiles/me/complete')
-      .send({ firstName: 'New', lastName: 'Customer' })
+      .send({
+        firstName: 'New',
+        lastName: 'Customer',
+        phoneNumber: '+639171234567',
+      })
       .expect(HttpStatus.UNAUTHORIZED);
 
     expect(verifyAccessToken).not.toHaveBeenCalled();
+    expect(completeCustomerProfile).not.toHaveBeenCalled();
+  });
+
+  it('requires a valid phone number when completing a profile', async () => {
+    verifyAccessToken.mockResolvedValue({
+      id: 'new-customer-id',
+      email: 'customer@example.com',
+    });
+
+    await request(app.getHttpServer())
+      .post('/user-profiles/me/complete')
+      .set('Authorization', 'Bearer new-customer-token')
+      .send({ firstName: 'New', lastName: 'Customer' })
+      .expect(HttpStatus.BAD_REQUEST);
+
+    expect(completeCustomerProfile).not.toHaveBeenCalled();
+  });
+
+  it('does not allow public registration to choose a privileged role', async () => {
+    verifyAccessToken.mockResolvedValue({
+      id: 'new-customer-id',
+      email: 'customer@example.com',
+    });
+
+    await request(app.getHttpServer())
+      .post('/user-profiles/me/complete')
+      .set('Authorization', 'Bearer new-customer-token')
+      .send({
+        firstName: 'New',
+        lastName: 'Customer',
+        phoneNumber: '+639171234567',
+        role: UserRole.ADMIN,
+      })
+      .expect(HttpStatus.BAD_REQUEST);
+
     expect(completeCustomerProfile).not.toHaveBeenCalled();
   });
 

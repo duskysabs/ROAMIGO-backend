@@ -44,6 +44,7 @@ describe('UserProfilesService', () => {
       userId: 'fake-user-id',
       firstName: 'Test',
       lastName: 'User',
+      phoneNumber: '+639171234567',
       birthDate: null,
       homeAddress: null,
       role: 'CUSTOMER',
@@ -89,6 +90,7 @@ describe('UserProfilesService', () => {
       userProfilesService.completeCustomerProfile('customer-id', {
         firstName: 'Customer',
         lastName: 'Demo',
+        phoneNumber: '+639171234567',
         birthDate: '2000-01-02',
         homeAddress: 'Demo address',
       }),
@@ -99,6 +101,7 @@ describe('UserProfilesService', () => {
         userId: 'customer-id',
         firstName: 'Customer',
         lastName: 'Demo',
+        phoneNumber: '+639171234567',
         birthDate: new Date('2000-01-02'),
         homeAddress: 'Demo address',
         role: UserRole.CUSTOMER,
@@ -115,9 +118,23 @@ describe('UserProfilesService', () => {
       userProfilesService.completeCustomerProfile('customer-id', {
         firstName: 'Customer',
         lastName: 'Demo',
+        phoneNumber: '+639171234567',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('returns a conflict when simultaneous completion creates a duplicate', async () => {
+    findUnique.mockResolvedValue(null);
+    create.mockRejectedValue({ code: 'P2002' });
+
+    await expect(
+      userProfilesService.completeCustomerProfile('customer-id', {
+        firstName: 'Customer',
+        lastName: 'Demo',
+        phoneNumber: '+639171234567',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

@@ -8,6 +8,7 @@ import { UserProfilesService } from '../../src/user-profiles/user-profiles.servi
 describe('AuthService', () => {
   let authService: AuthService;
 
+  const signUp = vi.fn();
   const signInWithPassword = vi.fn();
   const signOut = vi.fn();
   const getUser = vi.fn();
@@ -20,6 +21,7 @@ describe('AuthService', () => {
   const mockSupabaseService = {
     createClient: vi.fn(() => ({
       auth: {
+        signUp,
         signInWithPassword,
         signOut,
         getUser,
@@ -45,6 +47,43 @@ describe('AuthService', () => {
     }).compile();
 
     authService = module.get<AuthService>(AuthService);
+  });
+
+  it('returns the complete-profile step when signup creates a session', async () => {
+    signUp.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'fake-access-token',
+          refresh_token: 'fake-refresh-token',
+          expires_in: 3600,
+          token_type: 'bearer',
+        },
+        user: {
+          id: 'fake-user-id',
+          email: 'test@example.com',
+        },
+      },
+      error: null,
+    });
+
+    await expect(
+      authService.signUp({
+        email: 'test@example.com',
+        password: 'test-password',
+      }),
+    ).resolves.toEqual({
+      accessToken: 'fake-access-token',
+      refreshToken: 'fake-refresh-token',
+      expiresIn: 3600,
+      tokenType: 'bearer',
+      user: {
+        id: 'fake-user-id',
+        email: 'test@example.com',
+      },
+      requiresEmailConfirmation: false,
+      requiresProfile: true,
+      nextStep: 'COMPLETE_PROFILE',
+    });
   });
 
   it('returns tokens and user information when login succeeds', async () => {
@@ -92,6 +131,8 @@ describe('AuthService', () => {
         id: 'fake-user-id',
         email: 'test@example.com',
       },
+      requiresProfile: false,
+      nextStep: 'APPLICATION',
     });
   });
 
@@ -118,7 +159,7 @@ describe('AuthService', () => {
     expect(signOut).not.toHaveBeenCalled();
   });
 
-  it('signs out and rejects login when the user profile is missing', async () => {
+  it('returns the complete-profile step when the user profile is missing', async () => {
     signInWithPassword.mockResolvedValue({
       data: {
         session: {
@@ -133,17 +174,26 @@ describe('AuthService', () => {
       error: null,
     });
     findByUserId.mockResolvedValue(null);
-    signOut.mockResolvedValue({ error: null });
-
     await expect(
       authService.login({
         email: 'test@example.com',
         password: 'test-password',
       }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).resolves.toEqual({
+      accessToken: 'fake-access-token',
+      refreshToken: 'fake-refresh-token',
+      expiresIn: undefined,
+      tokenType: undefined,
+      user: {
+        id: 'fake-user-id',
+        email: 'test@example.com',
+      },
+      requiresProfile: true,
+      nextStep: 'COMPLETE_PROFILE',
+    });
 
     expect(findByUserId).toHaveBeenCalledWith('fake-user-id');
-    expect(signOut).toHaveBeenCalledOnce();
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it('signs out and rejects login when the account is inactive', async () => {

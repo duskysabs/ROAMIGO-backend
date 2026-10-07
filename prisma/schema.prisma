@@ -267,6 +267,7 @@ model UserProfile {
   userId        String        @id @db.Uuid @map("user_id")
   firstName     String        @db.VarChar(100) @map("first_name")
   lastName      String        @db.VarChar(100) @map("last_name")
+  phoneNumber   String?       @db.VarChar(20) @map("phone_number")
   birthDate     DateTime?     @db.Date @map("birth_date")
   homeAddress   String?       @db.VarChar(255) @map("home_address")
   role          UserRole
@@ -768,4 +769,3 @@ model Notification {
   @@map("notification")
   @@schema("public")
 }
-
