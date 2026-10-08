@@ -1,3 +1,12 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
+-- CreateEnum
+CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'CUSTOMER', 'STAFF', 'DRIVER');
+
+-- CreateEnum
+CREATE TYPE "AccountStatus" AS ENUM ('ACTIVE', 'INACTIVE');
+
 -- CreateEnum
 CREATE TYPE "EmploymentStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
 
@@ -66,6 +75,22 @@ CREATE TYPE "TravelSlipStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'COMPLETED', '
 
 -- CreateEnum
 CREATE TYPE "NotificationType" AS ENUM ('BOOKING', 'PAYMENT', 'ASSIGNMENT', 'CANCELLATION', 'REFUND', 'TRIP', 'SYSTEM');
+
+-- CreateTable
+CREATE TABLE "user_profile" (
+    "user_id" UUID NOT NULL,
+    "first_name" VARCHAR(100) NOT NULL,
+    "last_name" VARCHAR(100) NOT NULL,
+    "phone_number" VARCHAR(20),
+    "birth_date" DATE,
+    "home_address" VARCHAR(255),
+    "role" "UserRole" NOT NULL,
+    "account_status" "AccountStatus" NOT NULL,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(3) NOT NULL,
+
+    CONSTRAINT "user_profile_pkey" PRIMARY KEY ("user_id")
+);
 
 -- CreateTable
 CREATE TABLE "customer" (
@@ -170,10 +195,45 @@ CREATE TABLE "booking" (
     "estimated_duration_minutes" INTEGER NOT NULL,
     "final_quoted_price" DECIMAL(12,2) NOT NULL,
     "notes" TEXT,
+    "idempotency_key" VARCHAR(100),
     "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(3) NOT NULL,
 
     CONSTRAINT "booking_pkey" PRIMARY KEY ("booking_id")
+);
+
+-- CreateTable
+CREATE TABLE "booking_quote" (
+    "booking_quote_id" UUID NOT NULL,
+    "customer_user_id" UUID NOT NULL,
+    "booking_type" "BookingType" NOT NULL,
+    "vehicle_type_id" UUID NOT NULL,
+    "tour_package_id" UUID,
+    "request_snapshot" JSONB NOT NULL,
+    "route_evidence" JSONB,
+    "pricing_config_id" UUID NOT NULL,
+    "total_distance_km" DECIMAL(12,2) NOT NULL,
+    "estimated_duration_minutes" INTEGER NOT NULL,
+    "final_quoted_price" DECIMAL(12,2) NOT NULL,
+    "expires_at" TIMESTAMPTZ(3) NOT NULL,
+    "consumed_at" TIMESTAMPTZ(3),
+    "booking_id" UUID,
+    "created_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "booking_quote_pkey" PRIMARY KEY ("booking_quote_id")
+);
+
+-- CreateTable
+CREATE TABLE "booking_transition" (
+    "booking_transition_id" UUID NOT NULL,
+    "booking_id" UUID NOT NULL,
+    "actor_user_id" UUID NOT NULL,
+    "previous_state" "BookingStatus" NOT NULL,
+    "next_state" "BookingStatus" NOT NULL,
+    "reason" TEXT,
+    "occurred_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "booking_transition_pkey" PRIMARY KEY ("booking_transition_id")
 );
 
 -- CreateTable
@@ -427,10 +487,22 @@ CREATE UNIQUE INDEX "vehicle_plate_number_key" ON "vehicle"("plate_number");
 CREATE UNIQUE INDEX "package_stop_tour_package_id_sequence_number_key" ON "package_stop"("tour_package_id", "sequence_number");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "booking_idempotency_key_key" ON "booking"("idempotency_key");
+
+-- CreateIndex
 CREATE INDEX "booking_customer_user_id_created_at_idx" ON "booking"("customer_user_id", "created_at");
 
 -- CreateIndex
 CREATE INDEX "booking_booking_status_start_datetime_idx" ON "booking"("booking_status", "start_datetime");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "booking_quote_booking_id_key" ON "booking_quote"("booking_id");
+
+-- CreateIndex
+CREATE INDEX "booking_quote_customer_user_id_expires_at_idx" ON "booking_quote"("customer_user_id", "expires_at");
+
+-- CreateIndex
+CREATE INDEX "booking_transition_booking_id_occurred_at_idx" ON "booking_transition"("booking_id", "occurred_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "booking_stop_booking_id_sequence_number_key" ON "booking_stop"("booking_id", "sequence_number");
@@ -455,6 +527,9 @@ CREATE UNIQUE INDEX "outsourced_details_booking_id_key" ON "outsourced_details"(
 
 -- CreateIndex
 CREATE UNIQUE INDEX "travel_slip_booking_assignment_id_key" ON "travel_slip"("booking_assignment_id");
+
+-- AddForeignKey
+ALTER TABLE "user_profile" ADD CONSTRAINT "user_profile_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "customer" ADD CONSTRAINT "customer_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user_profile"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -485,6 +560,27 @@ ALTER TABLE "booking" ADD CONSTRAINT "booking_tour_package_id_fkey" FOREIGN KEY 
 
 -- AddForeignKey
 ALTER TABLE "booking" ADD CONSTRAINT "booking_vehicle_type_id_fkey" FOREIGN KEY ("vehicle_type_id") REFERENCES "vehicle_type"("vehicle_type_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_quote" ADD CONSTRAINT "booking_quote_customer_user_id_fkey" FOREIGN KEY ("customer_user_id") REFERENCES "user_profile"("user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_quote" ADD CONSTRAINT "booking_quote_vehicle_type_id_fkey" FOREIGN KEY ("vehicle_type_id") REFERENCES "vehicle_type"("vehicle_type_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_quote" ADD CONSTRAINT "booking_quote_tour_package_id_fkey" FOREIGN KEY ("tour_package_id") REFERENCES "tour_package"("tour_package_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_quote" ADD CONSTRAINT "booking_quote_pricing_config_id_fkey" FOREIGN KEY ("pricing_config_id") REFERENCES "pricing_configuration"("pricing_config_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_quote" ADD CONSTRAINT "booking_quote_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "booking"("booking_id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_transition" ADD CONSTRAINT "booking_transition_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "booking"("booking_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "booking_transition" ADD CONSTRAINT "booking_transition_actor_user_id_fkey" FOREIGN KEY ("actor_user_id") REFERENCES "user_profile"("user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "booking_stop" ADD CONSTRAINT "booking_stop_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "booking"("booking_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -560,3 +656,7 @@ ALTER TABLE "travel_slip" ADD CONSTRAINT "travel_slip_booking_assignment_id_fkey
 
 -- AddForeignKey
 ALTER TABLE "notification" ADD CONSTRAINT "notification_recipient_user_id_fkey" FOREIGN KEY ("recipient_user_id") REFERENCES "user_profile"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- Preserve application-table security in Supabase.
+ALTER TABLE "public"."user_profile" ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE "public"."user_profile" FROM anon, authenticated;
