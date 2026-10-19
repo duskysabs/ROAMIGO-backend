@@ -5,13 +5,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
+  AccountStatus,
   AssignmentStatus,
   BookingStatus,
   BookingType,
   DriverStatus,
   EmploymentStatus,
+  NotificationType,
   PackageStatus,
   StopType,
+  UserRole,
   VehicleStatus,
 } from '../generated/prisma/enums.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -19,6 +22,13 @@ import { PricingQuoteGateway } from '../pricing/pricing-quote.gateway.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
 import { RoutingService } from '../routing/routing.service.js';
+import { SubmitBookingQuoteDto } from './dto/submit-booking-quote.dto.js';
+
+const ACTIVE_ASSIGNMENT_STATUSES = [
+  AssignmentStatus.RESERVED,
+  AssignmentStatus.ASSIGNED,
+  AssignmentStatus.ACKNOWLEDGED,
+];
 
 @Injectable()
 export class BookingsService {
@@ -32,6 +42,11 @@ export class BookingsService {
   async create(customerUserId: string, dto: CreateBookingDto) {
     this.validateCreateRequest(dto);
     const selection = await this.validateBookingSelections(dto);
+    if (!(await this.hasEligibleInternalVehicle(dto))) {
+      throw new BadRequestException(
+        'No internal vehicle is available for the requested schedule',
+      );
+    }
     const routeStops = selection.stops ?? dto.stops!;
 
     // Customer input never supplies price, distance, or duration. Those values
@@ -106,35 +121,112 @@ export class BookingsService {
     this.validateCreateRequest(dto);
     const selection = await this.validateBookingSelections(dto);
     const routeStops = selection.stops ?? dto.stops!;
-    const quote = await this.pricingQuoteGateway.quote({ bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime), passengerCount: dto.passengerCount, stops: routeStops.map((stop) => ({ stopType: stop.stopType, latitude: stop.latitude, longitude: stop.longitude })), tourPackageBasePrice: selection.tourPackageBasePrice, tourPackageDurationMinutes: selection.tourPackageDurationMinutes });
+    const quote = await this.pricingQuoteGateway.quote({
+      bookingType: dto.bookingType,
+      vehicleTypeId: dto.vehicleTypeId,
+      startDatetime: new Date(dto.startDatetime),
+      endDatetime: new Date(dto.endDatetime),
+      passengerCount: dto.passengerCount,
+      stops: routeStops.map((stop) => ({
+        stopType: stop.stopType,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+      })),
+      tourPackageBasePrice: selection.tourPackageBasePrice,
+      tourPackageDurationMinutes: selection.tourPackageDurationMinutes,
+    });
+    const hasInternalVehicle = await this.hasEligibleInternalVehicle(dto);
     // Quote preview does not reserve capacity. #14 adds a signed, expiring quote
     // context for tamper-resistant booking submission.
-    return { currency: 'PHP', totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, pricingMode: quote.modelVersion };
+    return {
+      currency: 'PHP',
+      totalDistanceKm: quote.totalDistanceKm,
+      estimatedDurationMinutes: quote.estimatedDurationMinutes,
+      finalQuotedPrice: quote.finalQuotedPrice,
+      pricingMode: quote.modelVersion,
+      resourceAvailability: hasInternalVehicle
+        ? 'AVAILABLE'
+        : 'REVIEW_REQUIRED',
+    };
   }
 
   async issueQuote(customerUserId: string, dto: CreateBookingDto) {
     this.validateCreateRequest(dto);
     const selection = await this.validateBookingSelections(dto);
-    const routePreview = dto.bookingType === BookingType.CUSTOM_TRIP
-      ? await this.routeCustomTrip(dto)
-      : null;
+    const routePreview =
+      dto.bookingType === BookingType.CUSTOM_TRIP
+        ? await this.routeCustomTrip(dto)
+        : null;
     const routeStops = routePreview?.stops ?? selection.stops ?? dto.stops!;
-    const quote = await this.pricingQuoteGateway.quote({ bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime), passengerCount: dto.passengerCount, stops: routeStops.map((stop) => ({ stopType: stop.stopType, latitude: stop.latitude, longitude: stop.longitude })), tourPackageBasePrice: selection.tourPackageBasePrice, tourPackageDurationMinutes: selection.tourPackageDurationMinutes, routeDistanceKm: routePreview?.totalDistanceKm, routeDurationMinutes: routePreview?.estimatedDurationMinutes });
+    const quote = await this.pricingQuoteGateway.quote({
+      bookingType: dto.bookingType,
+      vehicleTypeId: dto.vehicleTypeId,
+      startDatetime: new Date(dto.startDatetime),
+      endDatetime: new Date(dto.endDatetime),
+      passengerCount: dto.passengerCount,
+      stops: routeStops.map((stop) => ({
+        stopType: stop.stopType,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+      })),
+      tourPackageBasePrice: selection.tourPackageBasePrice,
+      tourPackageDurationMinutes: selection.tourPackageDurationMinutes,
+      routeDistanceKm: routePreview?.totalDistanceKm,
+      routeDurationMinutes: routePreview?.estimatedDurationMinutes,
+    });
+    const hasInternalVehicle = await this.hasEligibleInternalVehicle(dto);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     // DTO instances are not Prisma JSON values. Serialize only the validated
     // request snapshot so it is stable across class-transformer boundaries.
-    const requestSnapshot = JSON.parse(JSON.stringify({ ...dto, stops: routeStops })) as Prisma.InputJsonObject;
-    const stored = await this.prisma.bookingQuote.create({ data: { customerUserId, bookingType: dto.bookingType, vehicleTypeId: dto.vehicleTypeId, tourPackageId: dto.tourPackageId, requestSnapshot, routeEvidence: routePreview ? JSON.parse(JSON.stringify(routePreview)) as Prisma.InputJsonObject : undefined, pricingConfigId: quote.pricingConfigurationId, totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt } });
-    return { quoteId: stored.id, currency: 'PHP', totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, expiresAt, pricingMode: quote.modelVersion };
+    const requestSnapshot = JSON.parse(
+      JSON.stringify({ ...dto, stops: routeStops }),
+    ) as Prisma.InputJsonObject;
+    const stored = await this.prisma.bookingQuote.create({
+      data: {
+        customerUserId,
+        bookingType: dto.bookingType,
+        vehicleTypeId: dto.vehicleTypeId,
+        tourPackageId: dto.tourPackageId,
+        requestSnapshot,
+        routeEvidence: routePreview
+          ? (JSON.parse(JSON.stringify(routePreview)) as Prisma.InputJsonObject)
+          : undefined,
+        pricingConfigId: quote.pricingConfigurationId,
+        totalDistanceKm: quote.totalDistanceKm,
+        estimatedDurationMinutes: quote.estimatedDurationMinutes,
+        finalQuotedPrice: quote.finalQuotedPrice,
+        expiresAt,
+      },
+    });
+    return {
+      quoteId: stored.id,
+      currency: 'PHP',
+      totalDistanceKm: quote.totalDistanceKm,
+      estimatedDurationMinutes: quote.estimatedDurationMinutes,
+      finalQuotedPrice: quote.finalQuotedPrice,
+      expiresAt,
+      pricingMode: quote.modelVersion,
+      resourceAvailability: hasInternalVehicle
+        ? 'AVAILABLE'
+        : 'REVIEW_REQUIRED',
+    };
   }
 
   private async routeCustomTrip(dto: CreateBookingDto) {
-    if (!dto.routePlaceIds) throw new BadRequestException('Custom Trip quotes require ordered location selections');
+    if (!dto.routePlaceIds)
+      throw new BadRequestException(
+        'Custom Trip quotes require ordered location selections',
+      );
     const preview = await this.routing.preview({ placeIds: dto.routePlaceIds });
     return {
       ...preview,
       stops: preview.stops.map((stop, index) => ({
-        stopType: index === 0 ? StopType.PICKUP : index === preview.stops.length - 1 ? StopType.DROPOFF : StopType.INTERMEDIATE,
+        stopType:
+          index === 0
+            ? StopType.PICKUP
+            : index === preview.stops.length - 1
+              ? StopType.DROPOFF
+              : StopType.INTERMEDIATE,
         locationName: stop.formattedAddress,
         formattedAddress: stop.formattedAddress,
         latitude: stop.latitude,
@@ -143,30 +235,138 @@ export class BookingsService {
     };
   }
 
-  async submitQuote(customerUserId: string, command: { quoteId: string; idempotencyKey: string }) {
-    const existing = await this.prisma.booking.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
+  async submitQuote(customerUserId: string, command: SubmitBookingQuoteDto) {
+    const existing = await this.prisma.booking.findUnique({
+      where: { idempotencyKey: command.idempotencyKey },
+    });
     if (existing) return existing;
-    const quote = await this.prisma.bookingQuote.findFirst({ where: { id: command.quoteId, customerUserId, consumedAt: null, expiresAt: { gt: new Date() } }, include: { pricingConfiguration: true } });
-    if (!quote) throw new BadRequestException('Quote is expired, consumed, or unavailable');
+    const quote = await this.prisma.bookingQuote.findFirst({
+      where: {
+        id: command.quoteId,
+        customerUserId,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      include: { pricingConfiguration: true },
+    });
+    if (!quote)
+      throw new BadRequestException(
+        'Quote is expired, consumed, or unavailable',
+      );
     const snapshot = quote.requestSnapshot as unknown as CreateBookingDto;
-    // Recheck availability immediately before durable consumption. The stored
-    // quote price remains immutable even when configuration changes later.
+    // Recheck availability immediately before durable consumption. An
+    // unavailable internal vehicle may enter the explicit review path, but it
+    // never creates a reservation or assignment.
     this.validateCreateRequest(snapshot);
     await this.validateBookingSelections(snapshot);
+    const hasInternalVehicle = await this.hasEligibleInternalVehicle(snapshot);
+    if (!hasInternalVehicle && !command.requestReviewIfUnavailable) {
+      throw new BadRequestException(
+        'No internal vehicle is available. Submit with requestReviewIfUnavailable=true to request staff review',
+      );
+    }
+    const initialStatus = hasInternalVehicle
+      ? BookingStatus.AWAITING_PAYMENT
+      : BookingStatus.BOOKING_REVIEW;
     const stops = snapshot.stops ?? [];
     return this.prisma.$transaction(async (tx) => {
-      const retry = await tx.booking.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
+      const retry = await tx.booking.findUnique({
+        where: { idempotencyKey: command.idempotencyKey },
+      });
       if (retry) return retry;
       // Claim before writing the booking so only one request can consume a quote.
       // A failed transaction rolls this claim back with the booking write.
       const claimed = await tx.bookingQuote.updateMany({
-        where: { id: quote.id, customerUserId, consumedAt: null, expiresAt: { gt: new Date() } },
+        where: {
+          id: quote.id,
+          customerUserId,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
         data: { consumedAt: new Date() },
       });
-      if (claimed.count !== 1) throw new BadRequestException('Quote is expired, consumed, or unavailable');
-      const booking = await tx.booking.create({ data: { customerUserId, idempotencyKey: command.idempotencyKey, vehicleTypeId: snapshot.vehicleTypeId, bookingType: snapshot.bookingType, tourPackageId: snapshot.tourPackageId, startDatetime: new Date(snapshot.startDatetime), endDatetime: new Date(snapshot.endDatetime), passengerCount: snapshot.passengerCount, bookingStatus: BookingStatus.AWAITING_PAYMENT, totalDistanceKm: quote.totalDistanceKm, estimatedDurationMinutes: quote.estimatedDurationMinutes, finalQuotedPrice: quote.finalQuotedPrice, notes: snapshot.notes, stops: { create: stops.map((stop: any, index) => ({ sequenceNumber: index + 1, stopType: stop.stopType, locationName: stop.locationName, formattedAddress: stop.formattedAddress, latitude: stop.latitude, longitude: stop.longitude, activity: stop.activity, plannedStopMinutes: stop.plannedStopMinutes })) }, pricingCalculations: { create: { pricingConfigId: quote.pricingConfigId, baseRateUsed: quote.pricingConfiguration.baseRate, distanceKm: quote.totalDistanceKm, tripDurationMinutes: quote.estimatedDurationMinutes, bookingDemandCount: 0, vehicleAvailability: 0, driverAvailability: 0, suggestedAmount: quote.finalQuotedPrice, adjustmentPercentage: 0, modelVersion: 'admin-fixed-v1' } } } });
-      await tx.bookingQuote.update({ where: { id: quote.id }, data: { bookingId: booking.id } });
-      await tx.bookingTransition.create({ data: { bookingId: booking.id, actorUserId: customerUserId, previousState: BookingStatus.DRAFT, nextState: BookingStatus.AWAITING_PAYMENT, reason: 'Customer accepted server-issued quote' } });
+      if (claimed.count !== 1)
+        throw new BadRequestException(
+          'Quote is expired, consumed, or unavailable',
+        );
+      const booking = await tx.booking.create({
+        data: {
+          customerUserId,
+          idempotencyKey: command.idempotencyKey,
+          vehicleTypeId: snapshot.vehicleTypeId,
+          bookingType: snapshot.bookingType,
+          tourPackageId: snapshot.tourPackageId,
+          startDatetime: new Date(snapshot.startDatetime),
+          endDatetime: new Date(snapshot.endDatetime),
+          passengerCount: snapshot.passengerCount,
+          bookingStatus: initialStatus,
+          totalDistanceKm: quote.totalDistanceKm,
+          estimatedDurationMinutes: quote.estimatedDurationMinutes,
+          finalQuotedPrice: quote.finalQuotedPrice,
+          notes: snapshot.notes,
+          stops: {
+            create: stops.map((stop: any, index) => ({
+              sequenceNumber: index + 1,
+              stopType: stop.stopType,
+              locationName: stop.locationName,
+              formattedAddress: stop.formattedAddress,
+              latitude: stop.latitude,
+              longitude: stop.longitude,
+              activity: stop.activity,
+              plannedStopMinutes: stop.plannedStopMinutes,
+            })),
+          },
+          pricingCalculations: {
+            create: {
+              pricingConfigId: quote.pricingConfigId,
+              baseRateUsed: quote.pricingConfiguration.baseRate,
+              distanceKm: quote.totalDistanceKm,
+              tripDurationMinutes: quote.estimatedDurationMinutes,
+              bookingDemandCount: 0,
+              vehicleAvailability: hasInternalVehicle ? 1 : 0,
+              driverAvailability: hasInternalVehicle ? 1 : 0,
+              suggestedAmount: quote.finalQuotedPrice,
+              adjustmentPercentage: 0,
+              modelVersion: 'admin-fixed-v1',
+            },
+          },
+        },
+      });
+      await tx.bookingQuote.update({
+        where: { id: quote.id },
+        data: { bookingId: booking.id },
+      });
+      await tx.bookingTransition.create({
+        data: {
+          bookingId: booking.id,
+          actorUserId: customerUserId,
+          previousState: BookingStatus.DRAFT,
+          nextState: initialStatus,
+          reason: hasInternalVehicle
+            ? 'Customer accepted server-issued quote'
+            : 'Customer requested staff review because no internal vehicle was available',
+        },
+      });
+      if (initialStatus === BookingStatus.BOOKING_REVIEW) {
+        const recipients = await tx.userProfile.findMany({
+          where: {
+            role: { in: [UserRole.ADMIN, UserRole.STAFF] },
+            accountStatus: AccountStatus.ACTIVE,
+          },
+          select: { userId: true },
+        });
+        if (recipients.length) {
+          await tx.notification.createMany({
+            data: recipients.map(({ userId }) => ({
+              recipientUserId: userId,
+              notificationType: NotificationType.BOOKING,
+              title: 'Booking requires resource review',
+              message: `Booking ${booking.id} requires an outsourced vehicle and driver review.`,
+              actionUrl: `/staff/booking-reviews/${booking.id}`,
+            })),
+          });
+        }
+      }
       return booking;
     });
   }
@@ -176,7 +376,9 @@ export class BookingsService {
     const endDatetime = new Date(dto.endDatetime);
 
     if (endDatetime <= startDatetime) {
-      throw new BadRequestException('End datetime must be after start datetime');
+      throw new BadRequestException(
+        'End datetime must be after start datetime',
+      );
     }
 
     if (
@@ -197,7 +399,10 @@ export class BookingsService {
     if (dto.routePlaceIds) return;
 
     const stops = dto.stops ?? [];
-    if (stops[0]?.stopType !== StopType.PICKUP || stops.at(-1)?.stopType !== StopType.DROPOFF) {
+    if (
+      stops[0]?.stopType !== StopType.PICKUP ||
+      stops.at(-1)?.stopType !== StopType.DROPOFF
+    ) {
       throw new BadRequestException(
         'The route must begin with a pickup and end with a dropoff',
       );
@@ -222,47 +427,6 @@ export class BookingsService {
       throw new BadRequestException('Selected vehicle type was not found');
     }
 
-    // This pre-payment check proves that a suitable currently unassigned pair
-    // exists. It does not reserve that pair: the confirmed-payment workflow
-    // must repeat the check transactionally before creating an assignment.
-    const eligibleVehicle = await this.prisma.vehicle.findFirst({
-      where: {
-        vehicleTypeId: dto.vehicleTypeId,
-        passengerCapacity: { gte: dto.passengerCount },
-        isDeleted: false,
-        vehicleStatus: VehicleStatus.AVAILABLE,
-        assignedDriver: {
-          is: {
-            driverStatus: DriverStatus.AVAILABLE,
-            staff: { is: { employmentStatus: EmploymentStatus.ACTIVE } },
-          },
-        },
-        assignments: {
-          none: {
-            assignmentStatus: {
-              in: [
-                AssignmentStatus.RESERVED,
-                AssignmentStatus.ASSIGNED,
-                AssignmentStatus.ACKNOWLEDGED,
-              ],
-            },
-            booking: {
-              is: {
-                startDatetime: { lt: new Date(dto.endDatetime) },
-                endDatetime: { gt: new Date(dto.startDatetime) },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!eligibleVehicle) {
-      throw new BadRequestException(
-        'No available vehicle-driver pair can accommodate the requested schedule',
-      );
-    }
-
     if (!dto.tourPackageId) {
       return {};
     }
@@ -278,7 +442,9 @@ export class BookingsService {
     }
 
     if (tourPackage.stops.length < 2) {
-      throw new BadRequestException('Selected tour package has no complete route');
+      throw new BadRequestException(
+        'Selected tour package has no complete route',
+      );
     }
 
     // Snapshot approved package stops so future package edits cannot rewrite history.
@@ -297,6 +463,42 @@ export class BookingsService {
     };
   }
 
+  /**
+   * Checks company-fleet readiness without reserving a vehicle. Drivers are
+   * fixed to their designated vehicles, so selection remains vehicle-centric.
+   */
+  private async hasEligibleInternalVehicle(dto: CreateBookingDto) {
+    const eligibleVehicle = await this.prisma.vehicle.findFirst({
+      where: {
+        vehicleTypeId: dto.vehicleTypeId,
+        passengerCapacity: { gte: dto.passengerCount },
+        isDeleted: false,
+        vehicleStatus: VehicleStatus.AVAILABLE,
+        assignedDriver: {
+          is: {
+            driverStatus: DriverStatus.AVAILABLE,
+            staff: { is: { employmentStatus: EmploymentStatus.ACTIVE } },
+          },
+        },
+        assignments: {
+          none: {
+            assignmentStatus: {
+              in: ACTIVE_ASSIGNMENT_STATUSES,
+            },
+            booking: {
+              is: {
+                startDatetime: { lt: new Date(dto.endDatetime) },
+                endDatetime: { gt: new Date(dto.startDatetime) },
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    return Boolean(eligibleVehicle);
+  }
+
   /** Returns an explicit customer-safe booking page, never a global list. */
   async findMine(customerUserId: string, query?: ListMyBookingsDto) {
     const limit = query?.limit ?? 20;
@@ -312,13 +514,17 @@ export class BookingsService {
         assignments: { select: { assignmentStatus: true } },
         payments: { include: { refunds: { select: { refundStatus: true } } } },
         cancellation: { select: { cancellationStatus: true } },
+        outsourcedDetails: true,
       },
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
       ...(query?.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     });
     const items = bookings.slice(0, limit);
-    return { items: items.map((booking) => this.toCustomerBooking(booking)), nextCursor: bookings.length > limit ? items.at(-1)?.id ?? null : null };
+    return {
+      items: items.map((booking) => this.toCustomerBooking(booking)),
+      nextCursor: bookings.length > limit ? (items.at(-1)?.id ?? null) : null,
+    };
   }
 
   /** Retrieves a single booking only when the customer owns it. */
@@ -333,6 +539,7 @@ export class BookingsService {
         payments: { include: { refunds: { select: { refundStatus: true } } } },
         receivable: true,
         cancellation: { select: { cancellationStatus: true } },
+        outsourcedDetails: true,
       },
     });
 
@@ -346,6 +553,52 @@ export class BookingsService {
   // Booking, payment, assignment, cancellation, and refund state are distinct
   // fields in the customer contract. Do not collapse them into bookingStatus.
   private toCustomerBooking(booking: any) {
-    return { id: booking.id, bookingType: booking.bookingType, bookingStatus: booking.bookingStatus, startDatetime: booking.startDatetime, endDatetime: booking.endDatetime, passengerCount: booking.passengerCount, totalDistanceKm: booking.totalDistanceKm.toString(), estimatedDurationMinutes: booking.estimatedDurationMinutes, finalQuotedPrice: booking.finalQuotedPrice.toString(), createdAt: booking.createdAt, tourPackage: booking.tourPackage ? { id: booking.tourPackage.id, name: booking.tourPackage.packageName } : null, vehicleType: { id: booking.vehicleType.id, name: booking.vehicleType.vehicleType }, stops: booking.stops.map((stop: any) => ({ sequenceNumber: stop.sequenceNumber, stopType: stop.stopType, locationName: stop.locationName, formattedAddress: stop.formattedAddress, latitude: stop.latitude.toString(), longitude: stop.longitude.toString() })), paymentStates: booking.payments.map((payment: any) => payment.paymentStatus), assignmentStates: booking.assignments.map((assignment: any) => assignment.assignmentStatus), cancellationState: booking.cancellation?.cancellationStatus ?? null, refundStates: booking.payments.flatMap((payment: any) => payment.refunds.map((refund: any) => refund.refundStatus)) };
+    return {
+      id: booking.id,
+      bookingType: booking.bookingType,
+      bookingStatus: booking.bookingStatus,
+      startDatetime: booking.startDatetime,
+      endDatetime: booking.endDatetime,
+      passengerCount: booking.passengerCount,
+      totalDistanceKm: booking.totalDistanceKm.toString(),
+      estimatedDurationMinutes: booking.estimatedDurationMinutes,
+      finalQuotedPrice: booking.finalQuotedPrice.toString(),
+      createdAt: booking.createdAt,
+      tourPackage: booking.tourPackage
+        ? { id: booking.tourPackage.id, name: booking.tourPackage.packageName }
+        : null,
+      vehicleType: {
+        id: booking.vehicleType.id,
+        name: booking.vehicleType.vehicleType,
+      },
+      stops: booking.stops.map((stop: any) => ({
+        sequenceNumber: stop.sequenceNumber,
+        stopType: stop.stopType,
+        locationName: stop.locationName,
+        formattedAddress: stop.formattedAddress,
+        latitude: stop.latitude.toString(),
+        longitude: stop.longitude.toString(),
+      })),
+      outsourcedDetails: booking.outsourcedDetails
+        ? {
+            vehicleModel: booking.outsourcedDetails.vehicleModel,
+            plateNumber: booking.outsourcedDetails.plateNumber,
+            vehicleProvider: booking.outsourcedDetails.vehicleProvider,
+            driverName: booking.outsourcedDetails.driverName,
+            driverContact: booking.outsourcedDetails.driverContact,
+            recordedAt: booking.outsourcedDetails.recordedAt,
+          }
+        : null,
+      paymentStates: booking.payments.map(
+        (payment: any) => payment.paymentStatus,
+      ),
+      assignmentStates: booking.assignments.map(
+        (assignment: any) => assignment.assignmentStatus,
+      ),
+      cancellationState: booking.cancellation?.cancellationStatus ?? null,
+      refundStates: booking.payments.flatMap((payment: any) =>
+        payment.refunds.map((refund: any) => refund.refundStatus),
+      ),
+    };
   }
 }
