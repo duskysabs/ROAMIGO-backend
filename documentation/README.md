@@ -18,6 +18,7 @@ This directory contains the technical documentation for the ROAMIGO backend.
 - [Authentication unit tests](./testing/unit/authentication.md) — Service, controller, and guard unit tests.
 - [Authentication end-to-end tests](./testing/e2e/authentication.md) — HTTP login and protected-route tests.
 - [Booking MVP test cases](./testing/booking-mvp-test-cases.md) — Living automated, manual, and blocked verification checklist.
+- [Booking Review Postman collection](./postman/README.md) — Importable collection and safe local environment template for the outsourced-resource review workflow.
 
 ### Supabase PostgreSQL and Prisma
 

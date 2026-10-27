@@ -6,26 +6,40 @@ import { BookingsService } from './bookings.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
 import { SubmitBookingQuoteDto } from './dto/submit-booking-quote.dto.js';
+import { BookingReviewsService } from './booking-reviews.service.js';
+import { BookingReviewDecisionDto } from './dto/booking-review-decision.dto.js';
 
 @Controller('bookings')
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly bookingReviews: BookingReviewsService,
+  ) {}
 
   @Get('me')
   @Roles(UserRole.CUSTOMER)
-  findMine(@Req() request: AuthenticatedRequest, @Query() query: ListMyBookingsDto) {
+  findMine(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: ListMyBookingsDto,
+  ) {
     return this.bookingsService.findMine(request.user!.id, query);
   }
 
   @Post()
   @Roles(UserRole.CUSTOMER)
-  create(@Req() request: AuthenticatedRequest, @Body() dto: SubmitBookingQuoteDto) {
+  create(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: SubmitBookingQuoteDto,
+  ) {
     return this.bookingsService.submitQuote(request.user!.id, dto);
   }
 
   @Post('quote')
   @Roles(UserRole.CUSTOMER)
-  previewQuote(@Req() request: AuthenticatedRequest, @Body() dto: CreateBookingDto) {
+  previewQuote(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: CreateBookingDto,
+  ) {
     return this.bookingsService.issueQuote(request.user!.id, dto);
   }
 
@@ -36,5 +50,15 @@ export class BookingsController {
     @Param('bookingId') bookingId: string,
   ) {
     return this.bookingsService.findOneMine(request.user!.id, bookingId);
+  }
+
+  @Post(':bookingId/review-decision')
+  @Roles(UserRole.CUSTOMER)
+  decideReview(
+    @Req() request: AuthenticatedRequest,
+    @Param('bookingId') bookingId: string,
+    @Body() dto: BookingReviewDecisionDto,
+  ) {
+    return this.bookingReviews.decide(request.user!.id, bookingId, dto);
   }
 }

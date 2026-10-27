@@ -15,17 +15,20 @@ confirm a payment, reserve a vehicle, or assign a driver.
 | Blocker | Implement post-payment transactional assignment. | It must re-check availability and atomically create the vehicle-driver assignment so concurrent confirmations cannot double-book a pair. |
 | High | Add PostgreSQL-level overlap protection for vehicle and driver schedules. | Application checks are advisory before payment and cannot alone guarantee concurrency safety. |
 | High | Add integration/e2e tests using an isolated Supabase/Postgres database. | Current focused tests use mocks because no database credentials are available. |
-| Medium | Add customer cancellation, refund, receivables, notifications, travel-slip, and outsourcing workflows. | These ERD entities are modeled but do not yet expose business APIs. |
+| Medium | Add customer cancellation, refund, receivables, and travel-slip workflows. | These ERD entities are modeled but do not yet expose complete business APIs. |
+| Medium | Add temporary outsourced-driver accounts and booking-scoped operational access. | The review workflow records external resources, but account invitation, trip actions, expiry, and revocation are intentionally deferred. |
 | Medium | Create the full booking-module manual/API test matrix in `documentation/`. | This is deferred until the pending payment and assignment workflows define their final behavior. |
 
 ## Current lifecycle boundary
 
-`POST /bookings/quote` validates the customer request, verifies there is a
-currently eligible vehicle-driver pair, and creates a server-owned quote that
-expires after ten minutes. `POST /bookings` accepts only that quote ID and a
-customer-supplied idempotency key. It rechecks availability, atomically claims
-the quote, stores the booking as `AWAITING_PAYMENT`, and records its initial
-booking transition. It creates no payment, reservation, or assignment.
+`POST /bookings/quote` validates the customer request, checks internal vehicle
+readiness, and creates a server-owned quote that expires after ten minutes. Its
+response reports `AVAILABLE` or `REVIEW_REQUIRED`; neither result reserves a
+resource. `POST /bookings` accepts the quote ID, a customer-supplied idempotency
+key, and an optional review opt-in. It rechecks availability and atomically
+claims the quote. Available requests enter `AWAITING_PAYMENT`; opted-in
+unavailable requests enter `BOOKING_REVIEW`. It creates no payment,
+reservation, or assignment.
 
 ## Deterministic pricing MVP boundary
 
@@ -47,11 +50,14 @@ The durable quote stores the validated request snapshot, price evidence, and
 for Custom Trips the server-resolved Geoapify route evidence, so the customer
 cannot submit a client-modified amount or route after reviewing a quote. A
 quote is consumed at most once and is bound to the created booking.
-The submission transaction records the initial `DRAFT` to
-`AWAITING_PAYMENT` transition. This is lifecycle evidence for the demo flow,
-not the complete transition policy. Booking Review, payment confirmation,
-cancellation, and assignment transitions still require their own authorized
-workflows and audit rules.
+The submission transaction records the initial `DRAFT` to either
+`AWAITING_PAYMENT` or `BOOKING_REVIEW`. This is lifecycle evidence for the demo
+flow, not the complete transition policy. Booking Review now covers the customer
+request, staff outsourcing record, customer decision, staff rejection,
+transition evidence, and in-application notification subset. Payment
+confirmation, cancellation policy, temporary outsourced-driver access, and
+assignment transitions still require their own authorized workflows and audit
+rules.
 
 ## Master-data API boundary
 

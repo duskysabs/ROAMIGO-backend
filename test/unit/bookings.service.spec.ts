@@ -28,10 +28,22 @@ describe('BookingsService', () => {
   const createBookingQuote = vi.fn();
   const previewRoute = vi.fn();
   const bookingRead = {
-    id: 'booking-id', bookingType: BookingType.CUSTOM_TRIP, bookingStatus: BookingStatus.AWAITING_PAYMENT,
-    startDatetime: new Date('2026-10-08T08:00:00Z'), endDatetime: new Date('2026-10-08T10:00:00Z'), passengerCount: 2,
-    totalDistanceKm: '0.00', estimatedDurationMinutes: 120, finalQuotedPrice: '1200.00', createdAt: new Date('2026-10-01T00:00:00Z'),
-    tourPackage: null, vehicleType: { id: 'vehicle-type-id', vehicleType: 'VAN' }, stops: [], assignments: [], payments: [], cancellation: null,
+    id: 'booking-id',
+    bookingType: BookingType.CUSTOM_TRIP,
+    bookingStatus: BookingStatus.AWAITING_PAYMENT,
+    startDatetime: new Date('2026-10-08T08:00:00Z'),
+    endDatetime: new Date('2026-10-08T10:00:00Z'),
+    passengerCount: 2,
+    totalDistanceKm: '0.00',
+    estimatedDurationMinutes: 120,
+    finalQuotedPrice: '1200.00',
+    createdAt: new Date('2026-10-01T00:00:00Z'),
+    tourPackage: null,
+    vehicleType: { id: 'vehicle-type-id', vehicleType: 'VAN' },
+    stops: [],
+    assignments: [],
+    payments: [],
+    cancellation: null,
   };
 
   beforeEach(async () => {
@@ -65,9 +77,10 @@ describe('BookingsService', () => {
     const bookings = [bookingRead];
     findMany.mockResolvedValue(bookings);
 
-    await expect(bookingsService.findMine('customer-id')).resolves.toEqual(
-      { items: [expect.objectContaining({ id: 'booking-id', paymentStates: [] })], nextCursor: null },
-    );
+    await expect(bookingsService.findMine('customer-id')).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'booking-id', paymentStates: [] })],
+      nextCursor: null,
+    });
 
     expect(findMany).toHaveBeenCalledWith({
       where: { customerUserId: 'customer-id' },
@@ -78,6 +91,7 @@ describe('BookingsService', () => {
         assignments: { select: { assignmentStatus: true } },
         payments: { include: { refunds: { select: { refundStatus: true } } } },
         cancellation: { select: { cancellationStatus: true } },
+        outsourcedDetails: true,
       },
       orderBy: { createdAt: 'desc' },
       take: 21,
@@ -90,7 +104,9 @@ describe('BookingsService', () => {
 
     await expect(
       bookingsService.findOneMine('customer-id', 'booking-id'),
-    ).resolves.toEqual(expect.objectContaining({ id: 'booking-id', assignmentStates: [] }));
+    ).resolves.toEqual(
+      expect.objectContaining({ id: 'booking-id', assignmentStates: [] }),
+    );
 
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: 'booking-id', customerUserId: 'customer-id' },
@@ -102,6 +118,7 @@ describe('BookingsService', () => {
         payments: { include: { refunds: { select: { refundStatus: true } } } },
         receivable: true,
         cancellation: { select: { cancellationStatus: true } },
+        outsourcedDetails: true,
       },
     });
   });
@@ -115,9 +132,26 @@ describe('BookingsService', () => {
   });
 
   it.each([
-    ['an invalid schedule', { startDatetime: '2026-10-01T10:00:00.000Z', endDatetime: '2026-10-01T09:00:00.000Z' }],
-    ['a route without a pickup first', { stops: [{ stopType: StopType.INTERMEDIATE }, { stopType: StopType.DROPOFF }] }],
-    ['a custom trip with a package', { tourPackageId: '00000000-0000-4000-8000-000000000001' }],
+    [
+      'an invalid schedule',
+      {
+        startDatetime: '2026-10-01T10:00:00.000Z',
+        endDatetime: '2026-10-01T09:00:00.000Z',
+      },
+    ],
+    [
+      'a route without a pickup first',
+      {
+        stops: [
+          { stopType: StopType.INTERMEDIATE },
+          { stopType: StopType.DROPOFF },
+        ],
+      },
+    ],
+    [
+      'a custom trip with a package',
+      { tourPackageId: '00000000-0000-4000-8000-000000000001' },
+    ],
   ])('rejects %s before pricing or persistence', async (_label, override) => {
     const dto = {
       vehicleTypeId: '00000000-0000-4000-8000-000000000002',
@@ -132,9 +166,9 @@ describe('BookingsService', () => {
       ...override,
     } as never;
 
-    await expect(bookingsService.create('customer-id', dto)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      bookingsService.create('customer-id', dto),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(quote).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -153,9 +187,9 @@ describe('BookingsService', () => {
       ],
     } as never;
 
-    await expect(bookingsService.create('customer-id', dto)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      bookingsService.create('customer-id', dto),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(quote).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
@@ -169,8 +203,18 @@ describe('BookingsService', () => {
       estimatedDurationMinutes: 62,
       geometry: { type: 'MultiLineString', coordinates: [] },
       stops: [
-        { placeId: 'pickup-place', formattedAddress: 'Pickup address', latitude: 10.1, longitude: 123.1 },
-        { placeId: 'dropoff-place', formattedAddress: 'Dropoff address', latitude: 10.2, longitude: 123.2 },
+        {
+          placeId: 'pickup-place',
+          formattedAddress: 'Pickup address',
+          latitude: 10.1,
+          longitude: 123.1,
+        },
+        {
+          placeId: 'dropoff-place',
+          formattedAddress: 'Dropoff address',
+          latitude: 10.2,
+          longitude: 123.2,
+        },
       ],
     });
     quote.mockResolvedValue({
@@ -184,41 +228,58 @@ describe('BookingsService', () => {
     });
     createBookingQuote.mockResolvedValue({ id: 'quote-id' });
 
-    await expect(bookingsService.issueQuote('customer-id', {
-      vehicleTypeId: '00000000-0000-4000-8000-000000000002',
-      bookingType: BookingType.CUSTOM_TRIP,
-      startDatetime: '2026-10-01T09:00:00.000Z',
-      endDatetime: '2026-10-01T10:30:00.000Z',
-      passengerCount: 2,
-      routePlaceIds: ['pickup-place', 'dropoff-place'],
-    } as never)).resolves.toEqual(expect.objectContaining({
-      quoteId: 'quote-id',
-      totalDistanceKm: '12.35',
-      estimatedDurationMinutes: 62,
-    }));
+    await expect(
+      bookingsService.issueQuote('customer-id', {
+        vehicleTypeId: '00000000-0000-4000-8000-000000000002',
+        bookingType: BookingType.CUSTOM_TRIP,
+        startDatetime: '2026-10-01T09:00:00.000Z',
+        endDatetime: '2026-10-01T10:30:00.000Z',
+        passengerCount: 2,
+        routePlaceIds: ['pickup-place', 'dropoff-place'],
+      } as never),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        quoteId: 'quote-id',
+        totalDistanceKm: '12.35',
+        estimatedDurationMinutes: 62,
+      }),
+    );
 
     expect(previewRoute).toHaveBeenCalledWith({
       placeIds: ['pickup-place', 'dropoff-place'],
     });
-    expect(quote).toHaveBeenCalledWith(expect.objectContaining({
-      routeDistanceKm: '12.35',
-      routeDurationMinutes: 62,
-      stops: [
-        { stopType: StopType.PICKUP, latitude: 10.1, longitude: 123.1 },
-        { stopType: StopType.DROPOFF, latitude: 10.2, longitude: 123.2 },
-      ],
-    }));
-    expect(createBookingQuote).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        routeEvidence: expect.objectContaining({ provider: 'geoapify', totalDistanceKm: '12.35' }),
-        requestSnapshot: expect.objectContaining({
-          stops: [
-            expect.objectContaining({ stopType: StopType.PICKUP, formattedAddress: 'Pickup address' }),
-            expect.objectContaining({ stopType: StopType.DROPOFF, formattedAddress: 'Dropoff address' }),
-          ],
+    expect(quote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routeDistanceKm: '12.35',
+        routeDurationMinutes: 62,
+        stops: [
+          { stopType: StopType.PICKUP, latitude: 10.1, longitude: 123.1 },
+          { stopType: StopType.DROPOFF, latitude: 10.2, longitude: 123.2 },
+        ],
+      }),
+    );
+    expect(createBookingQuote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          routeEvidence: expect.objectContaining({
+            provider: 'geoapify',
+            totalDistanceKm: '12.35',
+          }),
+          requestSnapshot: expect.objectContaining({
+            stops: [
+              expect.objectContaining({
+                stopType: StopType.PICKUP,
+                formattedAddress: 'Pickup address',
+              }),
+              expect.objectContaining({
+                stopType: StopType.DROPOFF,
+                formattedAddress: 'Dropoff address',
+              }),
+            ],
+          }),
         }),
       }),
-    }));
+    );
   });
 
   it('prices and creates a valid custom-trip booking with ordered stops', async () => {
@@ -409,6 +470,7 @@ describe('BookingsService', () => {
           },
         },
       },
+      select: { id: true },
     });
     expect(quote).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
