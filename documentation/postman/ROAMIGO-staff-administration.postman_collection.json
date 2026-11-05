@@ -1,0 +1,321 @@
+{
+  "info": {
+    "_postman_id": "41d90fd5-81dc-4d91-88bf-bb03751ef0ab",
+    "name": "ROAMIGO Staff Administration",
+    "description": "Administrator workflow for onboarding and managing Staff without manual Supabase table inserts.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Prepare accounts",
+      "item": [
+        {
+          "name": "Sign up prospective Staff auth user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Auth signup accepted', () => pm.expect(pm.response.code).to.eql(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.user && body.user.id).to.be.a('string');",
+                  "pm.environment.set('newStaffUserId', body.user.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{newStaffEmail}}\",\n  \"password\": \"{{newStaffPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            }
+          }
+        },
+        {
+          "name": "Log in as Administrator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Administrator login succeeds', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.accessToken).to.be.a('string');",
+                  "pm.environment.set('staffToken', body.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{staffEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Onboard Staff",
+      "item": [
+        {
+          "name": "Create active Staff profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff created', () => pm.expect(pm.response.code).to.eql(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.id).to.be.a('string');",
+                  "pm.expect(body.employmentStatus).to.eql('ACTIVE');",
+                  "pm.expect(body.user.role).to.eql('STAFF');",
+                  "pm.expect(body.user.accountStatus).to.eql('ACTIVE');",
+                  "pm.environment.set('managedStaffId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{newStaffUserId}}\",\n  \"firstName\": \"Mina\",\n  \"lastName\": \"Santos\",\n  \"phoneNumber\": \"+639171234567\",\n  \"birthDate\": \"1998-04-12\",\n  \"homeAddress\": \"Baguio City\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Read and update Staff",
+      "item": [
+        {
+          "name": "List Staff",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff list returned', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.data).to.be.an('array');",
+                  "pm.expect(body.meta).to.be.an('object');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Staff detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff detail returned', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.expect(pm.response.json().id).to.eql(pm.environment.get('managedStaffId'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff/{{managedStaffId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff", "{{managedStaffId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Staff profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff profile updated', () => pm.expect(pm.response.code).to.eql(200));",
+                  "pm.expect(pm.response.json().user.phoneNumber).to.eql('+639181234567');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phoneNumber\": \"+639181234567\",\n  \"homeAddress\": \"Updated Baguio address\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff/{{managedStaffId}}/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff", "{{managedStaffId}}", "profile"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Employment lifecycle",
+      "item": [
+        {
+          "name": "Suspend Staff",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff suspended', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.employmentStatus).to.eql('SUSPENDED');",
+                  "pm.expect(body.user.accountStatus).to.eql('INACTIVE');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"employmentStatus\": \"SUSPENDED\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff/{{managedStaffId}}/employment-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff", "{{managedStaffId}}", "employment-status"]
+            }
+          }
+        },
+        {
+          "name": "Reactivate Staff",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff reactivated', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.employmentStatus).to.eql('ACTIVE');",
+                  "pm.expect(body.user.accountStatus).to.eql('ACTIVE');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"employmentStatus\": \"ACTIVE\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff/{{managedStaffId}}/employment-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff", "{{managedStaffId}}", "employment-status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Optional terminal action",
+      "item": [
+        {
+          "name": "Deactivate Staff",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Staff deactivated', () => pm.expect(pm.response.code).to.eql(200));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.employmentStatus).to.eql('INACTIVE');",
+                  "pm.expect(body.user.accountStatus).to.eql('INACTIVE');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"employmentStatus\": \"INACTIVE\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/staff/{{managedStaffId}}/employment-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "staff", "{{managedStaffId}}", "employment-status"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

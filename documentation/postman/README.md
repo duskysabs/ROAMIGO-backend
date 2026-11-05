@@ -5,6 +5,7 @@ Import both files into Postman:
 1. `ROAMIGO-local.postman_environment.json`
 2. `ROAMIGO-booking-review.postman_collection.json`
 3. `ROAMIGO-fleet-management.postman_collection.json`
+4. `ROAMIGO-staff-administration.postman_collection.json`
 
 Select the imported environment and fill in the Customer and Staff/Admin
 credentials locally. Do not commit populated credentials or access tokens.
@@ -35,3 +36,16 @@ Because Driver records are retained for history, the same `driverStaffId`
 cannot be used for a second complete run. Use another Staff record for each
 onboarding run. If the vehicle-type discovery request returns no records, set
 `vehicleTypeId` manually from an existing `vehicle_type` row.
+
+## Staff administration
+
+The Staff Administration collection uses `staffEmail` and `staffPassword` for
+an existing Administrator account. Set `newStaffEmail` and `newStaffPassword`
+to unused prospective-employee credentials. The collection signs up that Auth
+user, captures `newStaffUserId`, and creates the Staff profile without manual
+Supabase table insertion.
+
+If Supabase email confirmation is enabled, the employee must confirm the email
+before logging in, but the Administrator may still create the Staff profile
+from the signup response's user ID. The main workflow ends by reactivating the
+Staff record. The final deactivation request is an optional terminal action.
