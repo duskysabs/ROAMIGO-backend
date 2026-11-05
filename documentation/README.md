@@ -22,6 +22,8 @@ This directory contains the technical documentation for the ROAMIGO backend.
 ### Booking API
 
 - [Booking MVP contract](./api/booking-mvp-contract.md) — Customer catalog, quote preview, booking, and state semantics.
+- [Fleet management contract](./api/fleet-management-contract.md) — Vehicle and Driver master data, pairing, readiness, and availability.
+- [Staff Administration contract](./api/staff-administration-contract.md) — Administrator-managed Staff onboarding, profile maintenance, and employment lifecycle.
 
 ### Testing
 
