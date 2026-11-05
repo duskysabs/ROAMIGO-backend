@@ -1,9 +1,20 @@
 # ROAMIGO ERD Improvement Proposal
 
-**Status:** Draft for team review  
-**Date:** October 3, 2026  
+**Status:** Historical design proposal; partially implemented
+
+**Originally recorded:** October 3, 2026
+
+**Current-state review:** October 27, 2026
+
 **Scope:** Booking domain and directly connected modules  
 **Primary reference:** ROAMIGO Capstone Documentation, including the approved ERD, SRS requirements, process models, and role definitions
+
+> Current-state note: `BookingQuote`, `BookingTransition`, quote idempotency,
+> deterministic pricing, and Geoapify route evidence are now implemented. The
+> repository migration history has been squashed into
+> `000000000000_squashed_migrations`. Recommendations below describe the
+> longer-term normalized target and must not be read as the current schema or
+> as instructions to regenerate the baseline.
 
 ## 1. Purpose
 
@@ -112,9 +123,12 @@ Rules:
 - Historical bookings continue to reference the version used when quoted.
 - The future FastAPI integration may suggest a price, but NestJS remains responsible for bounds, rounding, currency, fallback selection, and the final customer-facing amount.
 
-### 4.3 A pre-booking quote record is missing
+### 4.3 The implemented pre-booking quote needs long-term normalization
 
-The current flow calculates pricing during booking creation. This collapses quote generation and booking acceptance into one operation and makes expiry, reuse prevention, and historical review difficult.
+The MVP now uses `BookingQuote` with customer ownership, a ten-minute expiry,
+single-use consumption, a request snapshot, pricing evidence, route evidence,
+and optional resulting Booking. The normalized structure below remains a
+longer-term recommendation rather than an unimplemented MVP prerequisite.
 
 ### Recommendation
 
@@ -147,9 +161,12 @@ Optional quote-line records may explain fixed, distance, duration, package, fuel
 
 A booking must consume an active quote atomically. A quote must be owned by the same customer, unexpired, unused, and consistent with the submitted booking intent.
 
-### 4.4 Geoapify route evidence needs an immutable snapshot
+### 4.4 Geoapify route evidence uses an MVP JSONB snapshot
 
-Addresses and coordinates currently flow into booking creation, but the schema does not clearly preserve the authoritative provider result used for pricing.
+Custom Trip quote creation resolves ordered Geoapify place IDs server-side and
+stores the normalized result in `BookingQuote.routeEvidence`. This prevents the
+client from supplying authoritative distance or duration. A dedicated route
+snapshot model remains a later normalization and retention decision.
 
 ### Recommendation
 
@@ -183,9 +200,12 @@ Store distance in meters and duration in seconds internally. Convert values for 
 
 Tour Package stops remain catalog definitions. When a route is quoted, copy the accepted route into a snapshot so later package edits do not rewrite booking history.
 
-### 4.5 Booking lifecycle history is missing
+### 4.5 Booking lifecycle history exists but is not yet complete
 
-The Booking record stores only the current status. This is insufficient for reconstructing submission, validation, payment waiting, review, confirmation, cancellation, or completion decisions.
+`BookingTransition` records the initial booking transition and the implemented
+Booking Review decisions. Payment, assignment, cancellation-policy, dispatch,
+and trip transitions still need one approved transition policy and complete
+audit coverage.
 
 ### Recommendation
 
@@ -545,7 +565,8 @@ The defensible demo boundary is:
 Admin publishes pricing
 -> Customer requests route and quote
 -> Customer accepts quote once
--> Backend creates AWAITING_PAYMENT booking
+-> Backend creates AWAITING_PAYMENT when advisory capacity is available
+   or BOOKING_REVIEW when unavailable and the Customer opts in
 -> Customer views server-confirmed booking history
 ```
 
@@ -553,14 +574,14 @@ The demo must not claim payment confirmation, resource reservation, final assign
 
 ## 7. Phased migration plan
 
-### Phase 0: before applying the current booking-domain migration
+### Phase 0: reconcile and verify the current squashed baseline
 
-- Resolve vehicle-type configurability.
-- Extend and version pricing configuration.
-- Add route snapshots and booking quotes.
-- Add booking status transitions and idempotency.
-- Review deletion policies.
-- Regenerate and review the migration from the approved schema.
+- Reconcile the approved non-production database migration history with
+  `000000000000_squashed_migrations`.
+- Record current migration-status and representative schema evidence.
+- Do not rerun or regenerate the squashed baseline against a populated schema.
+- Review deletion and retention policies before activating additional
+  commercial or operational workflows.
 
 ### Phase 1: before payment or assignment is represented as complete
 
@@ -570,7 +591,8 @@ The demo must not claim payment confirmation, resource reservation, final assign
 - Add database overlap constraints.
 - Permit multiple historical assignments per booking.
 - Add transactional outbox and processed-message records.
-- Implement Staff Booking Review records and state transitions.
+- Extend Booking Review concurrency, temporary outsourced-driver access, and
+  complete audit behavior.
 
 ### Phase 2: before trip execution
 
@@ -601,11 +623,11 @@ The team should maintain a requirements traceability matrix rather than estimati
 
 | Requirement ID | Documented behavior | Owning module | Schema evidence | Endpoint or event | Test evidence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| REQ-BKG-03 | Obtain route distance and duration from Geoapify | Routing | RouteSnapshot | `POST /v1/quotes` | Provider contract test | Planned |
+| REQ-BKG-03 | Obtain route distance and duration from Geoapify | Routing | `BookingQuote.routeEvidence` MVP bridge | `POST /bookings/quote` | Unit coverage and non-production rehearsal; provider contract suite pending | Partially compliant |
 | REQ-BKG-08 | Prevent overlapping active reservations | Assignments | ResourceReservation | Internal assignment command | PostgreSQL concurrency test | Missing |
 | REQ-BKG-09 | Maintain separate lifecycle states | Booking and connected modules | Current state plus transition records | Commands and events | Transition matrix tests | Partial |
 | REQ-PRC group | Apply bounded pricing and fallback | Pricing | PricingConfiguration, PricingCalculation, BookingQuote | `POST /v1/quotes` | Golden calculation vectors | Planned |
-| REQ-IAM-03 | Customer accesses only owned records | Bookings | customer_user_id | Customer booking queries | Ownership HTTP tests | Partial |
+| REQ-IAM-03 | Customer accesses only owned records | Bookings | `customer_user_id` | Customer booking queries | Unit coverage and non-production rehearsal; database-backed HTTP suite pending | Partially compliant |
 
 Use these statuses:
 
@@ -622,10 +644,14 @@ The compliance percentage should be calculated from approved, testable requireme
 The following decisions should be approved before editing the Prisma schema:
 
 1. Can Administrators create arbitrary vehicle types, or only activate and configure an approved list?
-2. What deterministic formula will be used for Custom Trips during the demo?
-3. How long is a booking quote valid?
-4. Is preliminary availability required before quoting, and how will it be described to customers?
-5. Does booking creation stop at `AWAITING_PAYMENT` for the demo?
+2. Should the current fixed deterministic Custom Trip price later become a
+   per-distance and per-duration formula?
+3. Should the implemented ten-minute quote validity remain the production
+   policy?
+4. Should the implemented `AVAILABLE` or `REVIEW_REQUIRED` advisory result
+   remain the customer-facing availability contract?
+5. Confirm that payment-independent booking creation stops at
+   `AWAITING_PAYMENT` or `BOOKING_REVIEW` and never implies reservation.
 6. Will the demo include a controlled manual-payment workflow?
 7. Which booking and financial records may ever be physically deleted?
 8. What is the approved retention period for routes and precise location data?
@@ -650,6 +676,8 @@ The following decisions should be approved before editing the Prisma schema:
 
 ## 11. Proposed approval outcome
 
-If approved, the next step is to revise the Prisma schema and regenerate the pending migration before applying it to any shared database.
+Do not regenerate the current baseline. First reconcile the squashed migration
+history with the approved non-production database. Approved schema improvements
+must then use reviewed, forward-only migrations.
 
 Implementation should begin with the Phase 0 changes and the demo-critical vertical slice. Payment, final reservation, assignment, trip operations, FastAPI pricing, and external partner access remain separate release gates.

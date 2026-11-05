@@ -4,16 +4,27 @@ This directory contains the technical documentation for the ROAMIGO backend.
 
 ## Documentation
 
+### Current state
+
+- [MVP progress report](./audit-report/mvp-progress-report-100526.md) — Current implemented boundary, verification evidence, and payment-independent next work.
+- [Booking module pending work](./booking-module-pending-work.md) — Production gaps and explicit lifecycle boundaries.
+
 ### Authentication
+
 - [Authentication overview](./authentication/overview.md) — Login flow, protected endpoints, Supabase Authentication, validation, and Postman testing.
+- [Authentication work plan](./authentication/auth-work-plan.md) — Completed authentication behavior, open hardening work, and current decisions.
 
 ### System Architecture
+
 - [System architecture](./architecture/overview.md) — Major components and how they communicate.
+- [Capstone ERD alignment review](./architecture/capstone-erd-alignment-review.md) — Implemented deviations, migration guardrails, and schema decisions.
 
 ### Booking API
+
 - [Booking MVP contract](./api/booking-mvp-contract.md) — Customer catalog, quote preview, booking, and state semantics.
 
 ### Testing
+
 - [Testing overview](./testing/overview.md) — Testing levels, structure, commands, and security practices.
 - [Authentication unit tests](./testing/unit/authentication.md) — Service, controller, and guard unit tests.
 - [Authentication end-to-end tests](./testing/e2e/authentication.md) — HTTP login and protected-route tests.
@@ -22,7 +33,7 @@ This directory contains the technical documentation for the ROAMIGO backend.
 
 ### Supabase PostgreSQL and Prisma
 
-- [Booking domain migration runbook](./database/booking-domain-migration-runbook.md) - Public booking-schema rollout, verification, and recovery boundaries.
+- [Booking domain migration runbook](./database/booking-domain-migration-runbook.md) — Squashed-baseline reconciliation, rollout, verification, and recovery boundaries.
 
 ### Database migrations
 ### API testing 

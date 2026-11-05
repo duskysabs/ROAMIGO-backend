@@ -1,65 +1,100 @@
 # Booking domain migration runbook
 
-This migration adds the public booking-domain tables after the committed
-`20260914004329_init_user_profile` baseline. It deliberately does not create,
-alter, grant access to, or delete any Supabase `auth` object. The existing
-`user_profile` table and its `auth.users` foreign key remain owned by the
-earlier baseline and Supabase integration.
+**Current-state review:** October 27, 2026
 
-The committed migration name is `20261002071745_tables`. Its SQL is restored
-verbatim because the approved Supabase database has already applied that exact
-migration. Do not rename, edit, or replace it with an equivalent migration:
-Prisma identifies applied migrations by their recorded name and checksum.
+The repository currently has one consolidated Prisma migration:
 
-## Review boundary
+```text
+prisma/migrations/000000000000_squashed_migrations/migration.sql
+```
 
-`20261002071745_tables` creates the domain entities represented in
-`prisma/schema.prisma`: customer and staff profiles, fleet, packages, bookings
-and stops, pricing records, payments, receivables, cancellations, refunds,
-outsourcing, maintenance, travel slips, and notifications. It preserves the
-schema's UUID foreign keys, decimal precision, unique keys, timestamps, and
-delete actions.
+It represents the current public application schema, including profiles,
+customers, staff, fleet, packages, quotes, bookings, route evidence, pricing,
+payments, receivables, cancellations, refunds, outsourcing, maintenance, travel
+slips, and notifications.
 
-The migration intentionally does not add PostgreSQL exclusion constraints for
-driver or vehicle schedule overlap. Assignment is not in the initial booking
-demo flow, and overlap protection requires a later migration once the
-reservation interval and active assignment statuses are finalized.
+The migration creates public application objects only. Application migration
+work must not create, alter, grant access to, or delete Supabase `auth` objects.
+The `user_profile.user_id` relationship to `auth.users` must remain intact.
 
-## Migration-history recovery
+## Current evidence boundary
 
-If Prisma reports that `20261002071745_tables` exists in the database but is
-missing locally, recover the exact committed migration file first. Do not
-create a second migration for the same tables or enums. A duplicate migration
-will fail on the first existing object and leave a failed migration record.
+Earlier documentation recorded a successful non-production migration status on
+October 4, 2026, before the repository migration history was squashed on
+October 8. That earlier result proves the database state at that time; it does
+not prove that the database's migration-history table is reconciled with the
+current squashed migration name and checksum.
 
-If that duplicate migration was attempted and failed before any schema change,
-mark only that failed migration as rolled back using its exact name. Then run
-`pnpm prisma migrate status` again after restoring the original migration.
+Before another migration deployment, capture fresh redacted evidence for:
+
+- the current database migration-history rows;
+- `pnpm prisma migrate status` against the approved non-production database;
+- representative public tables, enums, indexes, and foreign keys;
+- the existing `user_profile` row count and `auth.users` relationship; and
+- successful login and profile access for an approved synthetic account.
+
+Do not claim the squashed baseline is deployed merely because its schema looks
+equivalent to the database.
+
+## Reconciliation boundary
+
+If the approved database records the former migration names while the repository
+contains only the squashed baseline, stop before running `migrate deploy`.
+Review the recorded names, checksums, and actual schema with the database owner
+and prepare an explicit baselining or forward-migration procedure.
+
+Do not:
+
+- rename or edit migration-history rows casually;
+- rerun the squashed migration against an already populated schema;
+- create a duplicate migration that recreates existing tables or enums;
+- use `migrate reset` on the shared Supabase database;
+- use `db push --accept-data-loss`; or
+- use broad schema synchronization as a substitute for reviewed migration
+  history.
+
+Any `prisma migrate resolve` action must name one exact migration and be backed
+by reviewed evidence that the database schema already matches the intended
+state. It must not be used to hide a partially applied or unknown migration.
 
 ## Pre-deployment checklist for future migrations
 
-1. Use an approved non-production Supabase or Postgres environment with the
-   `auth.users` table and the existing `user_profile` baseline already applied.
-2. Confirm `DIRECT_URL` points to that environment. Never commit its value.
-3. Run `pnpm prisma migrate status` and confirm the migration history is
-   consistent before adding any new pending migration.
-4. Take an environment backup or snapshot before applying the migration.
-5. Run `pnpm prisma migrate deploy` and then `pnpm prisma migrate status`.
-6. Run `pnpm prisma generate` so the generated client follows the committed
-   schema, then verify an existing user profile and auth login still work.
+1. Use an approved non-production Supabase or Postgres environment.
+2. Confirm `DIRECT_URL` points to that environment without printing or storing
+   the value in documentation.
+3. Confirm the squashed baseline and database migration history have been
+   reconciled and documented.
+4. Run `pnpm prisma validate` and `pnpm prisma generate` locally.
+5. Run `pnpm prisma migrate status` and retain redacted output.
+6. Review the new migration SQL for destructive operations, Supabase `auth`
+   access, locking, backfill requirements, and rollback or forward-repair steps.
+7. Take an environment backup or snapshot.
+8. Run `pnpm prisma migrate deploy` only for the reviewed pending migration.
+9. Run `pnpm prisma migrate status` again and execute representative schema and
+   application checks.
+
+## Deferred database safeguards
+
+The current baseline intentionally does not provide database-level exclusion
+constraints for overlapping vehicle and Driver schedules. Advisory availability
+checks are not reservations. Add interval-based overlap protection only after
+the reservation and active-assignment rules are approved.
+
+The current model also needs reviewed retention rules before commercial and
+operational workflows rely on records that can cascade when a Booking is
+deleted.
 
 ## Evidence to retain
 
-Record redacted before-and-after migration status, the deployment log, and
-queries confirming `user_profile` row counts are unchanged. Confirm that all
-new public tables exist and that no `auth` table or `user_profile` constraint
-was changed.
+Keep redacted before-and-after migration status, deployment logs, schema checks,
+and application smoke-test results. Never retain access tokens, connection
+strings, API keys, real customer data, or unredacted location data in the
+repository.
 
 ## Recovery
 
-Do not run `migrate reset`, `db push --accept-data-loss`, or a broad Supabase
-schema synchronization. If deployment fails, stop further releases, preserve
-the Prisma error and migration record, restore the approved backup when needed,
-and prepare a forward-only corrective migration. Manual schema changes require
-review against both this migration and `prisma/schema.prisma` before any
-`migrate resolve` action.
+If deployment fails, stop further releases, preserve the Prisma error and
+migration record, determine exactly which statements committed, and prepare a
+reviewed forward-only corrective migration. Restore an approved backup when the
+database owner determines it is required. Do not improvise destructive reset or
+history edits against the shared environment.

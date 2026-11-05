@@ -1,5 +1,7 @@
 # Booking MVP test cases
 
+**Current-state review:** October 27, 2026
+
 This is the living verification checklist for the booking MVP. Update the
 status beside a case when its automated test, manual verification, or external
 dependency changes. A planned case is not evidence that the behavior works.
@@ -28,16 +30,16 @@ Use a non-production Supabase project and redacted fixture data.
 
 | ID | Scenario | Expected result | Current evidence |
 | --- | --- | --- | --- |
-| DB-01 | Check Prisma migration history | `pnpm prisma migrate status` reports the database is up to date | Manually verified on 2026-10-04 |
+| DB-01 | Check Prisma migration history | `pnpm prisma migrate status` reports a reconciled, up-to-date history | Last verified on 2026-10-04 before the migration history was squashed; current verification required |
 | DB-02 | Existing `user_profile` and Supabase Auth relation after booking migration | Existing profile and Auth data remain usable | Manual verification required after data changes |
-| DB-03 | Booking-domain table and constraint presence | Public booking tables, indexes, enums, and foreign keys match `schema.prisma` | Migration applied, representative SQL checks still recommended |
+| DB-03 | Booking-domain table and constraint presence | Public booking tables, indexes, enums, and foreign keys match `schema.prisma` | Earlier schema was applied; representative checks against the current squashed baseline are required |
 
 ## Tour-package catalog
 
 | ID | Scenario | Expected result | Current evidence |
 | --- | --- | --- | --- |
 | CAT-01 | Admin creates a package | Package is created as `INACTIVE`; stop sequence is server assigned | Automated unit coverage |
-| CAT-02 | Admin submits malformed stops | Reject unless one `PICKUP` is first and one `DROPOFF` is last | Automated unit coverage, rerun after PR #38 test assertion fix |
+| CAT-02 | Admin submits malformed stops | Reject unless one `PICKUP` is first and one `DROPOFF` is last | Automated unit coverage |
 | CAT-03 | Admin replaces stops | Stops are replaced atomically and preserve sequential order | Automated unit coverage |
 | CAT-04 | Admin updates a missing package | `404 Not Found` and no update occurs | Automated unit coverage |
 | CAT-05 | Admin activates or deactivates a package | Status changes without altering existing booking stop snapshots | Manual API verification required |
@@ -53,14 +55,26 @@ Use a non-production Supabase project and redacted fixture data.
 | BKG-02 | Customer reads another customer's booking ID | `404 Not Found` | Automated unit coverage and non-production Postman rehearsal on 2026-10-05 |
 | BKG-03 | Custom route validation | Exactly one pickup and one drop-off, in valid order | Automated unit coverage |
 | BKG-04 | Package booking with inactive or incomplete package | Request is rejected | Automated unit coverage |
-| BKG-05 | No matching available driver and vehicle | Request is rejected and no booking is created | Automated unit coverage and non-production Postman rehearsal on 2026-10-05 |
+| BKG-05 | No matching available driver and vehicle | Quote reports `REVIEW_REQUIRED`; submission requires explicit customer review opt-in and does not reserve a resource | Automated unit coverage; updated manual rehearsal required |
 | BKG-06 | Customer requests a quote | Server stores a validated snapshot, returns a quote ID, and expires it after ten minutes without reserving capacity | Automated coverage and non-production Custom Trip and Tour Package rehearsal on 2026-10-05 |
 | BKG-07 | Customer submits a valid quote | Atomically claims one unexpired quote, creates `AWAITING_PAYMENT`, and records the initial transition | Automated coverage and non-production Custom Trip and Tour Package rehearsal on 2026-10-05 |
 | BKG-08 | Customer retries a submission with the same idempotency key | Returns the original booking without consuming another quote or creating a duplicate | Automated coverage and non-production rehearsal on 2026-10-05 |
 | BKG-09 | Customer submits an expired, consumed, or other-customer quote | Request is rejected without a booking | Automated coverage and non-production rehearsal on 2026-10-05 |
 | BKG-10 | Real MVP booking request | Uses one active effective Admin configuration and persists `AWAITING_PAYMENT` with calculation and transition evidence | Non-production Postman rehearsal on 2026-10-05 |
 
-## Deferred workflow boundaries
+## Booking Review
+
+| ID | Scenario | Expected result | Current evidence |
+| --- | --- | --- | --- |
+| REV-01 | Customer submits an unavailable quote with review opt-in | Creates one `BOOKING_REVIEW` booking, preserves the original request evidence, and creates no internal assignment | Automated unit coverage |
+| REV-02 | Staff records outsourced details | Stores the external provider, vehicle, Driver, contact, and agreed cost without creating internal fleet or assignment records | Automated unit coverage |
+| REV-03 | Customer approves outsourced details | Requires outsourced details and moves the booking to `AWAITING_PAYMENT` | Automated unit coverage |
+| REV-04 | Customer rejects outsourced details | Moves the booking to `CANCELLED` and records transition evidence | Automated unit coverage |
+| REV-05 | Staff rejects an unfulfillable review | Moves the booking to `CANCELLED` with an actor and reason | Automated unit coverage |
+| REV-06 | Customer and Staff authorization | Customer decisions are owner-scoped; review management is restricted to Staff and Administrators | Manual API and dedicated HTTP authorization coverage required |
+| REV-07 | Concurrent Staff processing | Competing updates cannot overwrite a completed review outcome | Real-database concurrency coverage required |
+
+## Provider and deferred workflow boundaries
 
 | ID | Scenario | Expected result | Status |
 | --- | --- | --- | --- |
@@ -79,12 +93,13 @@ Use a non-production Supabase project and redacted fixture data.
 3. Confirm migration status against the approved non-production Supabase project.
 4. Create an Admin, package, stops, active fleet resource, and Customer fixture.
 5. Exercise catalog authorization and active-package filtering.
-6. After #31, run the real booking submission case and record the booking ID,
-   status, route snapshot, and quoted amount with sensitive data removed.
+6. Run the real booking submission and Booking Review cases and record booking
+   IDs, statuses, route snapshots, and quoted amounts with sensitive data
+   removed.
 
 ## Recording results
 
 For each manual run, add the date, environment name, case ID, result, and a
-redacted request/response or screenshot in the pull request or issue. Never
-put access tokens, connection strings, real customer data, or payment details
-in this document.
+redacted request/response or screenshot to the review evidence. Never put
+access tokens, connection strings, real customer data, or payment details in
+this document.

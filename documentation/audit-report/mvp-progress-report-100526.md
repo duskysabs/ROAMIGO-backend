@@ -1,78 +1,96 @@
-## MVP Audit Report
+# MVP Progress Report
 
-### Current position
+**Originally recorded:** October 5, 2026
 
-The booking backend has strong MVP building blocks, but the system is not yet ready for an honest end-to-end customer demo.
+**Current-state review:** October 27, 2026
 
-Merged work includes:
+## Current position
 
-- Database migration baseline and booking schema.
-- Safe demo Admin and Customer provisioning.
-- Admin-managed deterministic pricing.
-- Customer catalog, quote, booking submission, booking list, and booking detail APIs.
-- Durable 10-minute quote expiry and idempotent booking submission.
+The backend supports the payment-independent booking journey through either
+`AWAITING_PAYMENT` or `BOOKING_REVIEW`. It must not yet be presented as a paid,
+reserved, assigned, or completed trip workflow.
+
+Implemented work includes:
+
+- Supabase signup, login, resumable customer onboarding, profiles, and role
+  guards.
+- A squashed Prisma migration baseline for the current application schema.
+- Safe non-production Administrator and Customer provisioning.
+- Administrator-managed deterministic pricing.
+- Customer catalog, quote, booking submission, booking list, and booking detail
+  APIs.
+- Durable ten-minute quote expiry, single-use quote consumption, and idempotent
+  booking submission.
+- Geoapify autocomplete, place resolution, ordered route preview, and binding of
+  authoritative route evidence to Custom Trip quotes.
 - Advisory vehicle and Driver eligibility checks.
-- Tour Package administration and active customer catalog.
-- Non-production demo data setup and rehearsal runbook.
-- Geoapify autocomplete, place resolution, and ordered route preview APIs.
+- Tour Package administration and active customer catalog reads.
+- Booking Review for unavailable internal resources, including Staff-recorded
+  outsourced details, customer approval or rejection, Staff rejection,
+  transition evidence, and in-application notifications.
+- Non-production demo-data setup and rehearsal documentation.
 
-### Issues that should be closed
+## Remaining payment-independent work
 
-None at this time.
+| Area | Remaining work |
+| --- | --- |
+| Documentation | Keep the API contract, authentication plan, migration guidance, and test evidence synchronized with merged behavior. |
+| Database verification | Reconcile the squashed migration baseline with the approved non-production database and record current `prisma migrate status` evidence. |
+| Integration evidence | Add an isolated Postgres or Supabase-compatible harness and authenticated database-backed tests for quote, submission, ownership, idempotency, Booking Review, and catalog authorization. |
+| Geoapify hardening | Add startup configuration validation, request limits, safe latency/failure observability, provider contract tests, and an isolated live check. |
+| Authentication hardening | Add startup configuration validation, standards-compliant Bearer parsing, login input bounds and normalization, refresh/logout policy, and real Supabase integration coverage. |
+| Master data | Complete vehicle-type lifecycle decisions and durable actor/reason/before-after audit history. |
+| Fleet readiness | Add pagination, filters, detail reads, licence/document/maintenance checks, validated status changes, and historical readiness evidence. |
+| Platform reliability | Add a transactional outbox and idempotent audit/event handoff for booking, pricing, and review actions. |
 
-The remaining partially implemented issues still have meaningful unfinished acceptance criteria:
+## Current evidence and limits
 
-| Issue | Why it remains open |
-|---|---|
-| #12 Geoapify | The provider boundary is merged, but route evidence is not yet bound to booking quote creation. Live non-production verification, observability, and provider integration coverage remain. |
-| #14 Booking lifecycle | The MVP quote submission subset is complete, but full legal transition policy, Booking Review, route-backed quote evidence, and transition-matrix tests remain. |
-| #22 Master data | Tour Packages are covered, but vehicle-type administration, audit history, and broader lifecycle behavior are incomplete. |
-| #23 Fleet | Advisory readiness is covered, but historical readiness evidence, pagination, document/maintenance rules, and concurrency behavior are incomplete. |
-| #34 Demo setup | The script and runbook are merged, but the actual non-production setup and recorded rehearsal should wait until the MVP is stable. |
-| #20 Quality | Focused unit tests exist, but there is no authenticated database-backed end-to-end evidence yet. |
-| #35 Frontend | Still in progress in the frontend repository. |
+On October 27, 2026, the merged Booking Review source passed:
 
-### Main MVP gaps
+- NestJS build;
+- lint;
+- 63 unit tests; and
+- 21 HTTP-level tests.
 
-1. Route-to-quote binding  
-   Geoapify can now calculate a route, but `POST /bookings/quote` still accepts raw stop coordinates and deterministic pricing still stores `0.00 km`. The route result must become server-owned quote evidence.
+The HTTP-level suite uses mocked application boundaries and placeholder test
+configuration. It is not evidence of a real Supabase or Postgres integration.
+Live provider and current non-production migration evidence must be recorded
+separately.
 
-2. Frontend integration  
-   The backend contracts exist, but no complete customer-facing journey has been proven:
+## Demonstrable boundary
 
-   ```text
-   Catalog → location search → route preview → quote → booking submit
-   → AWAITING_PAYMENT → booking history/detail
-   ```
+```text
+Catalog -> location search -> route preview -> server-owned quote
+-> booking submission
+   -> AWAITING_PAYMENT when advisory internal capacity is available
+   -> BOOKING_REVIEW when unavailable and the customer opts in
+-> customer booking history/detail
+```
 
-3. End-to-end evidence  
-   Unit tests cover important logic, but the team has not yet proven the authenticated flow against the non-production database.
+Neither outcome reserves a vehicle, assigns a Driver, or confirms payment.
 
-4. Live Geoapify check  
-   PR #44 establishes a safe disabled-by-default provider configuration. It still needs a non-production key and a controlled live validation after the codebase is stable.
+## Recommended next sequence
 
-5. Latest build confirmation  
-   The first #44 build failed due to an unavailable NestJS exception class. That was fixed and pushed, but the post-fix build result has not yet been recorded.
+1. Reconcile and verify the squashed migration baseline in an approved
+   non-production environment.
+2. Add database-backed booking and authorization integration tests.
+3. Finish Geoapify configuration, rate-limit, observability, and provider-test
+   hardening.
+4. Complete authentication input/configuration hardening.
+5. Complete master-data and fleet-readiness APIs that do not require assignment.
+6. Add the transactional audit/event foundation.
+7. Run and record the guarded non-production rehearsal with redacted evidence.
 
-### Recommended next sequence
+## Overall assessment
 
-1. Complete the focused #14 follow-up: bind Geoapify route output to quote issuance.
-2. Let the frontend team integrate the stable backend journey under #35.
-3. Add focused authenticated API evidence under #20:
-   - customer ownership;
-   - quote expiry;
-   - quote single-use;
-   - idempotency retry;
-   - route/provider failure;
-   - booking list and detail.
-4. Once the MVP is stable, run `pnpm demo:setup-booking` only in approved non-production and record the rehearsal evidence under #34.
+The backend is no longer a schema-only prototype. It has controlled pricing,
+protected customer ownership, durable route and price evidence, idempotent
+submission, advisory availability, and a pre-confirmation exception path.
 
-### Overall assessment
+It should currently be described as:
 
-The backend is no longer a schema-only prototype. It has modular modules, controlled pricing, protected customer ownership, quote persistence, idempotency, and a route-provider boundary.
+> Payment-independent booking MVP implemented; real-database integration and
+> production hardening remain.
 
-However, it should currently be described as:
-
-> Backend MVP infrastructure ready, end-to-end booking MVP still in integration.
-
-Do not present it as fully SRS-compliant yet. The most important truthfulness gap is that Geoapify route results are not yet used as authoritative booking quote evidence, and the visible frontend flow has not been demonstrated.
+Do not present it as fully SRS-compliant or production-ready until database,
+provider, concurrency, retention, and operational evidence is complete.

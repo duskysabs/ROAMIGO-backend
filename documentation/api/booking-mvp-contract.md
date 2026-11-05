@@ -46,14 +46,14 @@ It does not reserve capacity.
 - `GET /staff/booking-reviews` lists bookings currently in `BOOKING_REVIEW`.
 - `GET /staff/booking-reviews/:bookingId` returns the review details.
 - `PUT /staff/booking-reviews/:bookingId/outsourced-details` records or replaces
-  the external provider, vehicle, driver, contact, and agreed cost. It does not
+  the external provider, vehicle, Driver, contact, and agreed cost. It does not
   create company `Vehicle`, `Driver`, `Staff`, or `BookingAssignment` records.
 - `POST /staff/booking-reviews/:bookingId/reject` marks a review `REJECTED` when
-  staff cannot secure a suitable external resource.
+  Staff cannot secure a suitable external resource.
 
-The customer response exposes the outsourced driver and vehicle details but
+The customer response exposes the outsourced Driver and vehicle details but
 does not expose the business's agreed outsourcing cost. Review decisions and
-staff rejection are recorded in `BookingTransition`; relevant users receive
+Staff rejection are recorded in `BookingTransition`; relevant users receive
 in-application booking notifications.
 
 Booking, payment, assignment, cancellation, and refund states are separate
