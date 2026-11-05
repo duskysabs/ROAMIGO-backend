@@ -1,8 +1,12 @@
 # Capstone ERD Alignment Review
 
 **Status:** Draft for team review
-**Date:** October 5, 2026
-**Scope:** The proposed ERD supplied for team review, the Capstone documentation ERD, the committed Prisma schema and migrations, and the booking MVP additions currently in development.
+
+**Originally recorded:** October 5, 2026
+
+**Current-state review:** October 27, 2026
+
+**Scope:** The proposed ERD supplied for team review, the Capstone documentation ERD, the committed Prisma schema and squashed migration baseline, and the implemented booking MVP additions.
 
 ## 1. Purpose and decision boundary
 
@@ -17,9 +21,8 @@ This document is a review aid. It does not approve a database change, alter an a
 - **Proposed ERD image supplied for team review:** shows the same core logical model as the Capstone ERD: Supabase Auth and User Profile, Customer, Staff, Driver, fleet, packages and stops, Booking, assignment, payment, refund, receivable, pricing, maintenance, travel slip, and notifications.
 - **ROAMIGO Capstone Documentation (July 2026):** Section 4.2.2, Figure 5, and Figure 5.1, which define the logical ERD. The document identifies Booking as the central transactional record and includes users, customers, staff, drivers, vehicles, packages, stops, assignments, payments, refunds, receivables, maintenance, notifications, pricing, and travel slips.
 - **`prisma/schema.prisma`:** current application schema.
-- **`prisma/migrations/20261002071745_tables/migration.sql`:** initial booking-domain migration. Its entities and fields substantially implement the Capstone ERD.
-- **`prisma/migrations/20261005093000_booking_quote_lifecycle/migration.sql`:** additive quote and booking-transition migration.
-- **`prisma/migrations/20261005013000_quote_route_evidence/migration.sql`:** pending, unmerged route-evidence migration on the booking development branch at the time of this review.
+- **`prisma/migrations/000000000000_squashed_migrations/migration.sql`:** current repository baseline. It consolidates the former profile, booking-domain, quote lifecycle, route-evidence, and profile-phone migrations.
+- **Migration-history evidence:** the last documented non-production verification predates the squash. The approved database must be reconciled with the current baseline before another migration deployment is claimed as verified.
 
 ## 3. Executive assessment
 
@@ -27,7 +30,11 @@ The initial domain migration is broadly aligned with both the proposed ERD and t
 
 The main risk is not that the implementation failed to copy the ERD. The main risk is treating the diagram as final physical-database design when it lacks a durable quote boundary, route snapshot model, reservation-overlap protection, reassignment history, and several financial and deletion safeguards.
 
-The correct path is **forward-only, additive migration work**. Do not edit the already-applied `20261002071745_tables` migration, recreate its enums or tables, run `migrate reset`, or use a broad `db push` to force the database to resemble a revised diagram.
+The correct path is **forward-only, additive migration work** after the squashed
+baseline is reconciled with the approved database. Do not edit an applied
+database migration in place, recreate existing enums or tables, run
+`migrate reset`, or use a broad `db push` to force the database to resemble a
+revised diagram.
 
 ## 4. Alignment matrix
 
@@ -39,7 +46,7 @@ The correct path is **forward-only, additive migration work**. Do not edit the a
 | Booking | Booking is the central transactional reference and stores customer, vehicle type, schedule, status, route metrics, and quoted price. | `Booking` retains these fields and connects to stops, assignment, payment, receivable, cancellation, outsourcing, and pricing data. | Aligned | The booking record should remain the current-state operational record, not the only historical artifact. |
 | Quote before booking | No pre-booking quote entity is shown. Pricing Calculation depends on an existing Booking. | `BookingQuote` was added with customer ownership, immutable request snapshot, price, expiry, consumption timestamp, pricing configuration, and optional resulting booking. | Intentional additive deviation | Required for the MVP flow: route and price first, create `AWAITING_PAYMENT` booking once. This is safer than creating a booking just to calculate a price. |
 | Booking lifecycle history | Booking has a current `booking_status`; no transition log is shown. | `BookingTransition` records prior state, next state, actor, reason, and timestamp. | Intentional additive deviation | Required for auditability. Retain `Booking.bookingStatus` as the current-state projection. Review deletion policy because transitions currently cascade with Booking. |
-| Geoapify route result | The SRS requires provider-sourced location, distance, and travel-time data. The ERD stores stop coordinates and aggregate booking distance and duration, but has no provider result entity. | The development branch adds optional JSONB `BookingQuote.routeEvidence` after server-side routing. | MVP bridge, not target schema | It captures evidence quickly, but JSONB alone does not provide a stable normalized route contract, provider versioning, or efficient queryability. Do not treat it as the final route model. |
+| Geoapify route result | The SRS requires provider-sourced location, distance, and travel-time data. The ERD stores stop coordinates and aggregate booking distance and duration, but has no provider result entity. | Custom Trip quote creation resolves ordered place IDs server-side and stores the normalized provider result in optional JSONB `BookingQuote.routeEvidence`. | MVP bridge, not target schema | It captures evidence quickly, but JSONB alone does not provide a stable normalized route contract, provider versioning, or efficient queryability. Do not treat it as the final route model. |
 | Pricing | Pricing Configuration, Fuel Price Record, and Pricing Calculation are connected to Booking. | The same core models exist, plus a quote points to its applied configuration. | Partially aligned | The ERD ties `PricingCalculation` to Booking, which cannot explain a price shown before a booking exists. The current deterministic admin-price fallback is suitable for the demo, but published price versions and non-overlapping effective periods are not yet enforced. |
 | Assignment | One Booking Assignment is linked to a Booking, Vehicle, and Driver. | `BookingAssignment.bookingId` is unique, matching the ERD. | Aligned but structurally insufficient | A unique booking assignment prevents reassignment history. It is acceptable while assignment is outside the MVP, but must change before dispatch or recovery workflows are claimed. |
 | Availability and reservation | Vehicle and Driver statuses are present. The ERD has no reservation interval or overlap constraint. | Availability checks are advisory. No database reservation or exclusion constraint exists. | Missing capability, not an MVP deviation | Do not call pre-booking availability a reservation. Add an interval-based reservation model and database overlap protection before confirming assignments. |
@@ -71,15 +78,18 @@ Admin publishes deterministic pricing
 -> customer supplies ordered Geoapify place IDs
 -> backend resolves the route and issues an expiring quote
 -> customer accepts that quote once
--> backend creates an AWAITING_PAYMENT Booking
+-> backend creates an AWAITING_PAYMENT Booking when advisory capacity exists
+   or a BOOKING_REVIEW request when unavailable and the customer opts in
 -> customer can retrieve only their own bookings
 ```
 
 This preserves the Capstone Booking entity while avoiding a false claim that payment, reservation, assignment, or dispatch is complete.
 
-### 6.2 Route evidence on the development branch
+### 6.2 Implemented route evidence
 
-The pending `route_evidence` JSONB column is an MVP evidence container for the exact server-resolved route used to quote a Custom Trip. It is intentionally optional so historic and Tour Package quotes remain valid.
+The `BookingQuote.routeEvidence` JSONB field is the MVP evidence container for
+the exact server-resolved route used to quote a Custom Trip. It is intentionally
+optional so historic and Tour Package quotes remain valid.
 
 Before considering the model stable, the team should decide whether the following normalized target is required:
 
@@ -110,7 +120,9 @@ RouteSnapshotStop
 
 ## 7. Required rules for future migration work
 
-1. Do not alter or rename an applied migration, including `20261002071745_tables`.
+1. Reconcile `000000000000_squashed_migrations` with the approved database's
+   recorded migration history before creating or deploying another migration.
+   Do not rewrite a migration after it has been accepted as the baseline.
 2. Do not run `migrate reset`, broad database synchronization, or data-loss commands against the shared Supabase database.
 3. Add only reviewed, forward migrations that create new public application objects or safely add nullable fields and indexes.
 4. Preserve the existing `user_profile` to `auth.users` relationship and do not modify Supabase `auth` objects in application migrations.
@@ -141,4 +153,5 @@ The team should approve or amend these statements:
 - No applied migration will be rewritten to chase the diagram.
 - Payment, reservation, assignment, dispatch, and external partner access remain separate release gates.
 
-Once approved, create targeted issues for each P0 or P1 decision rather than making a broad schema rewrite.
+Once approved, create targeted work items for each P0 or P1 decision rather
+than making a broad schema rewrite.

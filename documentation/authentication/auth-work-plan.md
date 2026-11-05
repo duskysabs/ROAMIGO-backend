@@ -9,9 +9,12 @@ work. Update the status and notes here as each task is completed.
 
 The backend currently provides:
 
+- Public Customer signup through Supabase Auth: `POST /auth/signup`
 - Password login through Supabase Auth: `POST /auth/login`
 - Access-token verification through Supabase Auth
 - Current-user endpoint: `GET /auth/me`
+- Resumable Customer profile completion: `POST /user-profiles/me/complete`
+- Authenticated profile updates: `PATCH /user-profiles/me`
 - Prisma-backed user profiles
 - Application roles: `ADMIN`, `CUSTOMER`, `STAFF`, and `DRIVER`
 - Application account states: `ACTIVE` and `INACTIVE`
@@ -19,11 +22,14 @@ The backend currently provides:
 - DTO validation with a global `ValidationPipe`
 - Row-level security and revoked direct client access to `user_profile`
 
-Baseline verification on 2026-09-17:
+Current verification on 2026-10-27:
 
 - Build passes
 - Lint passes
-- 13 existing tests pass
+- 63 unit tests pass
+- 21 HTTP-level tests pass with mocked application boundaries and placeholder
+  test configuration
+- Real Supabase and database integration coverage remains pending
 
 ## Work Queue
 
@@ -32,14 +38,14 @@ Baseline verification on 2026-09-17:
 **Priority:** Critical  
 **Status:** Completed on 2026-09-17
 
-Login currently returns valid Supabase access and refresh tokens before checking
-whether the application profile exists or is active. The profile and account-state
-checks currently happen only when a guarded endpoint is accessed.
+Login checks the application profile after Supabase authenticates the user.
+Missing-profile users receive a resumable onboarding response, while inactive
+profiles are signed out and denied tokens.
 
 Required work:
 
 - Load the user's profile after Supabase validates the credentials.
-- Do not return tokens when the profile is missing.
+- Return a constrained onboarding response when the profile is missing.
 - Do not return tokens when `accountStatus` is not `ACTIVE`.
 - Decide whether missing profiles should return `403 Forbidden` or a generic login
   failure response.
@@ -48,19 +54,23 @@ Required work:
 
 Acceptance criteria:
 
-- An active user with a profile can log in.
-- A missing-profile or inactive user receives no tokens.
+- An active user with a profile can log in and continue to the application.
+- A missing-profile user is directed to complete the Customer profile.
+- An inactive user receives no tokens.
 - Protected endpoints continue rejecting inactive users even if they possess an
   older token.
 
 Implementation notes:
 
 - Login now loads the Prisma profile before returning authentication tokens.
-- Missing-profile and inactive-account logins sign out the newly created Supabase
-  session and return `403 Forbidden` without exposing its tokens.
+- Missing-profile login returns the Supabase session with
+  `nextStep: COMPLETE_PROFILE`; protected application routes still require a
+  completed active profile.
+- Inactive-account login signs out the newly created Supabase session and
+  returns `403 Forbidden` without exposing its tokens.
 - Existing protected-route checks remain in place for previously issued tokens.
-- Unit coverage verifies active, missing-profile, and inactive-account login paths.
-- HTTP coverage verifies missing-profile and inactive-account response statuses.
+- Unit and HTTP coverage verify active, missing-profile, and inactive-account
+  login paths.
 
 ### AUTH-02: Add login rate limiting
 
@@ -98,26 +108,42 @@ Requests`, and that unrelated routes remain unaffected.
 ### AUTH-03: Add registration and profile provisioning
 
 **Priority:** High  
-**Status:** Not started
+**Status:** Completed for resumable Customer onboarding on 2026-10-07
 
-No current workflow guarantees that a Supabase user has a corresponding Prisma
-`UserProfile`.
+Public signup creates the Supabase identity first. A user with a confirmed
+session then completes an application profile through an authenticated endpoint.
+This is intentionally resumable rather than a distributed transaction across
+Supabase Auth and Postgres.
 
 Required work:
 
-- Define whether registration is public, invitation-only, or administrator-only.
-- Create the Supabase account and matching profile as one coordinated workflow.
+- Provide public Customer registration without accepting privileged role or
+  account-status input.
+- Return explicit next-step state for email confirmation or profile completion.
+- Allow an authenticated user without a profile to resume onboarding.
 - Never allow public callers to choose privileged roles or active status.
-- Handle partial failure and retries without producing duplicate or orphaned users.
-- Decide whether profile creation uses a backend endpoint, database trigger, or
-  trusted Supabase webhook.
+- Reject duplicate profile completion without replacing the existing profile.
 - Add validation and tests.
 
 Acceptance criteria:
 
-- Every successfully registered user has exactly one profile.
-- A failed profile creation does not leave an account that appears usable.
+- A registered user without a profile is explicitly marked as requiring profile
+  completion and cannot use profile-protected application routes.
+- Completing a profile creates exactly one active `CUSTOMER` profile and linked
+  Customer record.
 - Public registration cannot create `ADMIN`, `STAFF`, or `DRIVER` privileges.
+
+Implementation notes:
+
+- `POST /auth/signup` normalizes the email, validates bounded credentials, and
+  reports `CONFIRM_EMAIL` or `COMPLETE_PROFILE` as the next step.
+- `POST /auth/login` resumes incomplete onboarding with
+  `nextStep: COMPLETE_PROFILE`.
+- `POST /user-profiles/me/complete` uses token-only authentication so a user
+  without a profile can create one.
+- Profile completion always creates an active Customer and rejects duplicates.
+- Privileged demo profiles remain restricted to the guarded non-production
+  bootstrap workflow.
 
 ### AUTH-04: Add token refresh
 
@@ -228,7 +254,7 @@ Acceptance criteria:
 ### AUTH-09: Harden token parsing and login input
 
 **Priority:** Medium  
-**Status:** Not started
+**Status:** Partially complete
 
 Required work:
 
@@ -237,6 +263,14 @@ Required work:
 - Add reasonable maximum lengths to email and password inputs.
 - Normalize email whitespace and casing before authentication where appropriate.
 - Add boundary and malformed-input tests.
+
+Current partial coverage:
+
+- Signup trims and lowercases email addresses and enforces email/password length
+  limits.
+- Login input still lacks equivalent normalization and maximum lengths.
+- Both authentication guards still require the exact case-sensitive `Bearer `
+  prefix and need shared malformed-header handling.
 
 Acceptance criteria:
 
@@ -267,27 +301,24 @@ Acceptance criteria:
 
 ## Recommended Execution Order
 
-1. AUTH-01 — Enforce account state during login
-2. AUTH-07 — Strengthen authorization coverage
-3. AUTH-02 — Add login rate limiting
-4. AUTH-08 — Validate configuration at startup
-5. AUTH-09 — Harden token parsing and login input
-6. AUTH-03 — Add registration and profile provisioning
-7. AUTH-04 — Add token refresh
-8. AUTH-05 — Add logout and session revocation
-9. AUTH-06 — Add password and email lifecycle flows
-10. AUTH-10 — Add real integration coverage
+1. AUTH-08 — Validate configuration at startup
+2. AUTH-09 — Finish token parsing and login input hardening
+3. AUTH-04 — Add token refresh
+4. AUTH-05 — Add logout and session revocation
+5. AUTH-06 — Add password and email lifecycle flows
+6. AUTH-10 — Add real integration coverage
 
 ## Decisions Needed
 
 Record decisions here before implementing tasks that depend on them:
 
-- Registration policy: undecided
-- Initial public-user role: likely `CUSTOMER`, not yet approved
-- Initial account status: undecided
+- Registration policy: public Customer signup with resumable onboarding
+- Initial public-user role: `CUSTOMER`
+- Initial account status: `ACTIVE` when Customer profile completion succeeds
 - Browser token storage policy: undecided
 - Mobile token storage policy: undecided
-- Missing-profile login response: undecided
+- Missing-profile login response: return the authenticated session with
+  `requiresProfile: true` and `nextStep: COMPLETE_PROFILE`
 - Session revocation policy: undecided
 - Production email provider and redirect URLs: undecided
 - Login rate limit: five attempts per 60 seconds with a 60-second block
@@ -306,3 +337,8 @@ Add dated entries when a task begins or finishes.
   14 end-to-end tests pass.
 - 2026-09-17: AUTH-02 completed. Build and lint pass; 25 standard tests and
   16 end-to-end tests pass.
+- 2026-10-07: AUTH-03 completed for public Customer signup and resumable profile
+  completion. Privileged profile creation remains restricted.
+- 2026-10-27: Documentation reconciled with the current implementation. Build,
+  lint, 63 unit tests, and 21 mocked HTTP-level tests pass; real integration
+  coverage remains pending.

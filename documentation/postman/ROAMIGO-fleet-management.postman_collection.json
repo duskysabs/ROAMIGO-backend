@@ -1,0 +1,266 @@
+{
+  "info": {
+    "_postman_id": "f07689e9-348f-42c9-bba8-3c83fa2733fe",
+    "name": "ROAMIGO Fleet Management",
+    "description": "Admin fleet CRUD and Staff/Admin operational pairing workflow. Requires an existing active Staff row without a Driver record.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Authentication and prerequisites",
+      "item": [
+        {
+          "name": "Login as Administrator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Administrator login succeeds', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.accessToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (data.accessToken) pm.environment.set('staffToken', data.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{staffEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Discover Vehicle Type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Vehicle types are available', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "if (data.length) pm.environment.set('vehicleTypeId', data[0].id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/booking-options/vehicle-types"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Administrator onboarding",
+      "item": [
+        {
+          "name": "Create Driver from Existing Staff",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const suffix = Date.now().toString().slice(-8);",
+                  "pm.environment.set('fleetLicenseNumber', `TEST-${suffix}`);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Driver starts unavailable', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(data.driverStatus).to.eql('UNAVAILABLE');",
+                  "});",
+                  "if (data.id) pm.environment.set('fleetDriverId', data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"staffId\": \"{{driverStaffId}}\",\n  \"licenseNumber\": \"{{fleetLicenseNumber}}\",\n  \"licenseExpiry\": \"2035-12-31\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/fleet/drivers"
+          }
+        },
+        {
+          "name": "Create Vehicle",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const suffix = Date.now().toString().slice(-6);",
+                  "pm.environment.set('fleetPlateNumber', `TST-${suffix}`);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Vehicle starts unavailable', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.expect(data.vehicleStatus).to.eql('UNAVAILABLE');",
+                  "});",
+                  "if (data.id) pm.environment.set('fleetVehicleId', data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleTypeId\": \"{{vehicleTypeId}}\",\n  \"plateNumber\": \"{{fleetPlateNumber}}\",\n  \"fuelType\": \"DIESEL\",\n  \"fuelEfficiency\": 10.5,\n  \"vehicleModel\": \"Fleet Test Vehicle\",\n  \"passengerCapacity\": 12,\n  \"yearModel\": 2025,\n  \"color\": \"White\"\n}"
+            },
+            "url": "{{baseUrl}}/admin/fleet/vehicles"
+          }
+        },
+        {
+          "name": "Pair Driver and Vehicle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Pairing is stored', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.assignedDriverId).to.eql(pm.environment.get('fleetDriverId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"driverId\": \"{{fleetDriverId}}\"\n}" },
+            "url": "{{baseUrl}}/staff/vehicles/{{fleetVehicleId}}/designated-driver"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Make pair operational",
+      "item": [
+        {
+          "name": "Set Driver Available",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"driverStatus\": \"AVAILABLE\"\n}" },
+            "url": "{{baseUrl}}/staff/drivers/{{fleetDriverId}}/status"
+          }
+        },
+        {
+          "name": "Set Vehicle Available",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vehicleStatus\": \"AVAILABLE\"\n}" },
+            "url": "{{baseUrl}}/staff/vehicles/{{fleetVehicleId}}/status"
+          }
+        },
+        {
+          "name": "Get Vehicle Detail",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/staff/vehicles/{{fleetVehicleId}}"
+          }
+        },
+        {
+          "name": "Get Driver Detail",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/staff/drivers/{{fleetDriverId}}"
+          }
+        },
+        {
+          "name": "List Vehicles with Search and Pagination",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/staff/vehicles?search={{fleetPlateNumber}}&page=1&limit=20"
+          }
+        },
+        {
+          "name": "Check Fleet Availability",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const start = new Date(Date.now() + 24 * 60 * 60 * 1000);",
+                  "const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);",
+                  "pm.environment.set('startDatetime', start.toISOString());",
+                  "pm.environment.set('endDatetime', end.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/staff/fleet/availability?start={{startDatetime}}&end={{endDatetime}}&vehicleTypeId={{vehicleTypeId}}&passengers=2"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Cleanup",
+      "item": [
+        {
+          "name": "Deactivate Driver",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "POST",
+            "url": "{{baseUrl}}/admin/fleet/drivers/{{fleetDriverId}}/deactivate"
+          }
+        },
+        {
+          "name": "Soft Delete Vehicle",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{staffToken}}", "type": "string" }] },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/admin/fleet/vehicles/{{fleetVehicleId}}"
+          }
+        }
+      ]
+    }
+  ]
+}
