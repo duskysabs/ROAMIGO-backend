@@ -1,7 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { BookingsService } from '../../src/bookings/bookings.service.js';
-import { BookingStatus, BookingType, StopType } from '../../src/generated/prisma/enums.js';
+import {
+  BookingStatus,
+  BookingType,
+  StopType,
+} from '../../src/generated/prisma/enums.js';
 
 describe('BookingsService quote lifecycle', () => {
   const command = {
@@ -15,8 +19,20 @@ describe('BookingsService quote lifecycle', () => {
     endDatetime: '2026-10-10T10:00:00.000Z',
     passengerCount: 2,
     stops: [
-      { stopType: StopType.PICKUP, locationName: 'Pickup', formattedAddress: 'Pickup address', latitude: 10, longitude: 123 },
-      { stopType: StopType.DROPOFF, locationName: 'Dropoff', formattedAddress: 'Dropoff address', latitude: 10.1, longitude: 123.1 },
+      {
+        stopType: StopType.PICKUP,
+        locationName: 'Pickup',
+        formattedAddress: 'Pickup address',
+        latitude: 10,
+        longitude: 123,
+      },
+      {
+        stopType: StopType.DROPOFF,
+        locationName: 'Dropoff',
+        formattedAddress: 'Dropoff address',
+        latitude: 10.1,
+        longitude: 123.1,
+      },
     ],
   };
 
@@ -26,9 +42,15 @@ describe('BookingsService quote lifecycle', () => {
       booking: { findUnique: vi.fn().mockResolvedValue(existing) },
       bookingQuote: { findFirst: vi.fn() },
     };
-    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never, {} as never);
+    const service = new BookingsService(
+      prisma as never,
+      { quote: vi.fn() } as never,
+      {} as never,
+    );
 
-    await expect(service.submitQuote('00000000-0000-4000-8000-000000000103', command)).resolves.toBe(existing);
+    await expect(
+      service.submitQuote('00000000-0000-4000-8000-000000000103', command),
+    ).resolves.toBe(existing);
     expect(prisma.bookingQuote.findFirst).not.toHaveBeenCalled();
   });
 
@@ -37,9 +59,15 @@ describe('BookingsService quote lifecycle', () => {
       booking: { findUnique: vi.fn().mockResolvedValue(null) },
       bookingQuote: { findFirst: vi.fn().mockResolvedValue(null) },
     };
-    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never, {} as never);
+    const service = new BookingsService(
+      prisma as never,
+      { quote: vi.fn() } as never,
+      {} as never,
+    );
 
-    await expect(service.submitQuote('00000000-0000-4000-8000-000000000103', command)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.submitQuote('00000000-0000-4000-8000-000000000103', command),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('claims the quote, persists the booking, and records the initial transition', async () => {
@@ -56,7 +84,9 @@ describe('BookingsService quote lifecycle', () => {
       },
       bookingTransition: { create: vi.fn() },
     };
-    transaction.mockImplementation((callback: (client: typeof tx) => unknown) => callback(tx));
+    transaction.mockImplementation((callback: (client: typeof tx) => unknown) =>
+      callback(tx),
+    );
     const prisma = {
       booking: { findUnique: outerFindUnique },
       bookingQuote: {
@@ -72,20 +102,94 @@ describe('BookingsService quote lifecycle', () => {
       },
       $transaction: transaction,
     };
-    const service = new BookingsService(prisma as never, { quote: vi.fn() } as never, {} as never);
+    const service = new BookingsService(
+      prisma as never,
+      { quote: vi.fn() } as never,
+      {} as never,
+    );
     // The persisted quote was already validated at issuance. This test isolates
     // durable consumption and transition evidence from availability queries.
     (service as any).validateBookingSelections = vi.fn().mockResolvedValue({});
+    (service as any).hasEligibleInternalVehicle = vi
+      .fn()
+      .mockResolvedValue(true);
 
-    await expect(service.submitQuote('00000000-0000-4000-8000-000000000103', command)).resolves.toEqual({ id: 'booking-new' });
-    expect(tx.bookingQuote.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ id: command.quoteId, consumedAt: null }),
-    }));
+    await expect(
+      service.submitQuote('00000000-0000-4000-8000-000000000103', command),
+    ).resolves.toEqual({ id: 'booking-new' });
+    expect(tx.bookingQuote.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: command.quoteId,
+          consumedAt: null,
+        }),
+      }),
+    );
     expect(tx.bookingTransition.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         bookingId: 'booking-new',
         previousState: BookingStatus.DRAFT,
         nextState: BookingStatus.AWAITING_PAYMENT,
+      }),
+    });
+  });
+
+  it('creates a review booking when no internal vehicle is available and the customer opts in', async () => {
+    const tx = {
+      booking: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 'booking-review' }),
+      },
+      bookingQuote: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn(),
+      },
+      bookingTransition: { create: vi.fn() },
+      userProfile: { findMany: vi.fn().mockResolvedValue([]) },
+      notification: { createMany: vi.fn() },
+    };
+    const prisma = {
+      booking: { findUnique: vi.fn().mockResolvedValue(null) },
+      bookingQuote: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: command.quoteId,
+          requestSnapshot: snapshot,
+          pricingConfigId: '00000000-0000-4000-8000-000000000104',
+          totalDistanceKm: '0.00',
+          estimatedDurationMinutes: 120,
+          finalQuotedPrice: '1200.00',
+          pricingConfiguration: { baseRate: '1200.00' },
+        }),
+      },
+      $transaction: vi.fn((callback: (client: typeof tx) => unknown) =>
+        callback(tx),
+      ),
+    };
+    const service = new BookingsService(
+      prisma as never,
+      { quote: vi.fn() } as never,
+      {} as never,
+    );
+    (service as any).validateBookingSelections = vi.fn().mockResolvedValue({});
+    (service as any).hasEligibleInternalVehicle = vi
+      .fn()
+      .mockResolvedValue(false);
+
+    await expect(
+      service.submitQuote('00000000-0000-4000-8000-000000000103', {
+        ...command,
+        requestReviewIfUnavailable: true,
+      }),
+    ).resolves.toEqual({ id: 'booking-review' });
+    expect(tx.booking.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        bookingStatus: BookingStatus.BOOKING_REVIEW,
+      }),
+    });
+    expect(tx.bookingTransition.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        previousState: BookingStatus.DRAFT,
+        nextState: BookingStatus.BOOKING_REVIEW,
       }),
     });
   });

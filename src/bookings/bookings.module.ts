@@ -5,11 +5,13 @@ import { PricingModule } from '../pricing/pricing.module.js';
 import { RoutingModule } from '../routing/routing.module.js';
 import { BookingsController } from './bookings.controller.js';
 import { BookingsService } from './bookings.service.js';
+import { BookingReviewsController } from './booking-reviews.controller.js';
+import { BookingReviewsService } from './booking-reviews.service.js';
 
 @Module({
   imports: [AuthModule, PrismaModule, PricingModule, RoutingModule],
-  controllers: [BookingsController],
-  providers: [BookingsService],
-  exports: [BookingsService],
+  controllers: [BookingsController, BookingReviewsController],
+  providers: [BookingsService, BookingReviewsService],
+  exports: [BookingsService, BookingReviewsService],
 })
 export class BookingsModule {}

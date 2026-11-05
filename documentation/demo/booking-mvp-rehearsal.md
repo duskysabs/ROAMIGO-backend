@@ -190,7 +190,7 @@ production environment.
 ## Evidence to record
 
 Record the date, environment name, case ID, result, and redacted request and
-response evidence in the pull request or issue:
+response in the review evidence:
 
 - catalog response;
 - quote response with expiry and price;
@@ -222,3 +222,9 @@ response evidence in the pull request or issue:
 
 This evidence applies only to the non-production rehearsal. It does not prove
 payment, reservation, assignment, dispatch, or production readiness.
+
+The October 5 migration result predates the October 8 repository migration
+squash. Treat it as historical schema evidence, not proof that the current
+`000000000000_squashed_migrations` history is reconciled with the approved
+database. Run the current migration-status checks from the migration runbook
+before another deployment.

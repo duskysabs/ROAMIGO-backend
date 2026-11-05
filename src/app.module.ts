@@ -12,6 +12,7 @@ import { FleetModule } from './fleet/fleet.module.js';
 import { BookingOptionsModule } from './booking-options/booking-options.module.js';
 import { LocationsModule } from './locations/locations.module.js';
 import { RoutingModule } from './routing/routing.module.js';
+import { StaffModule } from './staff/staff.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -36,6 +37,7 @@ import { RoutingModule } from './routing/routing.module.js';
     BookingOptionsModule,
     LocationsModule,
     RoutingModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [AppService],

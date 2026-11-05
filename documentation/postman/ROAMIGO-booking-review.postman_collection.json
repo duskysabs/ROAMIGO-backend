@@ -1,0 +1,835 @@
+{
+  "info": {
+    "_postman_id": "6b47f0d9-9224-4a3c-b3dd-71436d9f0aa4",
+    "name": "ROAMIGO - Booking Review",
+    "description": "Tests the booking-review workflow on the dev branch: authenticate, force internal vehicle unavailability, create a review booking, record outsourced resources, and approve or reject the offer. Import the companion environment file and fill in credentials. Customer approval, customer rejection, and staff rejection are mutually exclusive terminal branches; create a fresh review booking before testing another branch.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Authentication",
+      "item": [
+        {
+          "name": "Customer Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Customer login succeeds', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.accessToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (data.accessToken) pm.environment.set('customerToken', data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Staff Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Staff login succeeds', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.accessToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (data.accessToken) pm.environment.set('staffToken', data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{staffEmail}}\",\n  \"password\": \"{{staffPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Fixture Discovery",
+      "description": "These requests populate IDs when their environment variables are empty. Review the selected values before continuing. The database must already contain an active tour package, a supported vehicle type, an active pricing configuration, and customer/staff profiles.",
+      "item": [
+        {
+          "name": "List Vehicle Types",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Vehicle types are available', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "if (!pm.environment.get('vehicleTypeId') && data.length) {",
+                  "  pm.environment.set('vehicleTypeId', data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/booking-options/vehicle-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "booking-options",
+                "vehicle-types"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Active Tour Packages",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('An active tour package is available', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "if (!pm.environment.get('tourPackageId') && data.length) {",
+                  "  pm.environment.set('tourPackageId', data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tour-packages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tour-packages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Company Vehicles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "const vehicleTypeId = pm.environment.get('vehicleTypeId');",
+                  "const matching = data",
+                  "  .filter((vehicle) => vehicle.vehicleTypeId === vehicleTypeId)",
+                  "  .sort((a, b) => b.passengerCapacity - a.passengerCapacity);",
+                  "pm.test('A vehicle exists for the selected type', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(matching).to.be.an('array').that.is.not.empty;",
+                  "});",
+                  "if (matching.length) {",
+                  "  const vehicle = matching[0];",
+                  "  pm.environment.set('vehicleId', vehicle.id);",
+                  "  pm.environment.set('originalVehicleStatus', vehicle.vehicleStatus);",
+                  "  if (!pm.environment.get('passengerCount')) {",
+                  "    pm.environment.set('passengerCount', vehicle.passengerCapacity);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff/vehicles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "vehicles"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Force Review and Submit Booking",
+      "description": "Mark every vehicle that can satisfy the chosen vehicle type and passenger count as unavailable. The included request updates vehicleId; duplicate it for any other equally eligible vehicle. Cleanup restores the selected vehicle.",
+      "item": [
+        {
+          "name": "Mark Selected Vehicle Unavailable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Vehicle is unavailable', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(pm.response.json().vehicleStatus).to.eql('UNAVAILABLE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleStatus\": \"UNAVAILABLE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/vehicles/{{vehicleId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "vehicles",
+                "{{vehicleId}}",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate Reviewable Quote",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('startDatetime') || !pm.environment.get('endDatetime')) {",
+                  "  const start = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);",
+                  "  start.setUTCHours(8, 0, 0, 0);",
+                  "  const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);",
+                  "  pm.environment.set('startDatetime', start.toISOString());",
+                  "  pm.environment.set('endDatetime', end.toISOString());",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Quote requires staff review', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.resourceAvailability).to.eql('REVIEW_REQUIRED');",
+                  "  pm.expect(data.quoteId).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (data.quoteId) pm.environment.set('quoteId', data.quoteId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleTypeId\": \"{{vehicleTypeId}}\",\n  \"bookingType\": \"TOUR_PACKAGE\",\n  \"tourPackageId\": \"{{tourPackageId}}\",\n  \"startDatetime\": \"{{startDatetime}}\",\n  \"endDatetime\": \"{{endDatetime}}\",\n  \"passengerCount\": {{passengerCount}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bookings/quote",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "quote"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit Booking for Review",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Booking enters review', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.bookingStatus).to.eql('BOOKING_REVIEW');",
+                  "  pm.expect(data.id).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (data.id) pm.environment.set('bookingId', data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quoteId\": \"{{quoteId}}\",\n  \"idempotencyKey\": \"{{idempotencyKey}}\",\n  \"requestReviewIfUnavailable\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Staff Review",
+      "item": [
+        {
+          "name": "List Pending Booking Reviews",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "const bookingId = pm.environment.get('bookingId');",
+                  "pm.test('Pending list contains the review booking', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.some((booking) => booking.id === bookingId)).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff/booking-reviews",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "booking-reviews"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Pending Booking Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Review details are returned', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.id).to.eql(pm.environment.get('bookingId'));",
+                  "  pm.expect(data.bookingStatus).to.eql('BOOKING_REVIEW');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/staff/booking-reviews/{{bookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "booking-reviews",
+                "{{bookingId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record and Submit Outsourced Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Outsourced details are recorded', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.bookingId).to.eql(pm.environment.get('bookingId'));",
+                  "  pm.expect(data.driverName).to.eql('Juan Dela Cruz');",
+                  "  pm.expect(data.plateNumber).to.eql('ABC 1234');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleModel\": \"Toyota Hiace\",\n  \"plateNumber\": \"ABC 1234\",\n  \"vehicleProvider\": \"Partner Transport Services\",\n  \"driverName\": \"Juan Dela Cruz\",\n  \"driverContact\": \"09171234567\",\n  \"agreedCost\": 4500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/booking-reviews/{{bookingId}}/outsourced-details",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "booking-reviews",
+                "{{bookingId}}",
+                "outsourced-details"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Customer Reviews Staff Submission",
+      "description": "Run Get Customer Booking, then choose exactly one decision request. Approval and rejection cannot both be run against the same booking.",
+      "item": [
+        {
+          "name": "Get Customer Booking with Outsourced Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Customer can review safe outsourced details', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(data.bookingStatus).to.eql('BOOKING_REVIEW');",
+                  "  pm.expect(data.outsourcedDetails).to.be.an('object');",
+                  "  pm.expect(data.outsourcedDetails.driverName).to.eql('Juan Dela Cruz');",
+                  "  pm.expect(data.outsourcedDetails).not.to.have.property('agreedCost');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Outsourced Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Approved booking awaits payment', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.bookingStatus).to.eql('AWAITING_PAYMENT');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/review-decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "review-decision"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Alternative - Reject Outsourced Details",
+          "description": "Use a fresh BOOKING_REVIEW booking. Do not run this after approval.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Rejected offer cancels the booking', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.bookingStatus).to.eql('CANCELLED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/review-decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "review-decision"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Alternative Staff Rejection",
+      "description": "Use a fresh BOOKING_REVIEW booking when staff cannot secure external resources. Do not record outsourced details or run a customer decision first.",
+      "item": [
+        {
+          "name": "Reject Unfulfilled Booking Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Staff rejection closes the review', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.bookingStatus).to.eql('REJECTED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"No suitable external vehicle could be secured.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/booking-reviews/{{bookingId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "booking-reviews",
+                "{{bookingId}}",
+                "reject"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Cleanup",
+      "item": [
+        {
+          "name": "Restore Selected Vehicle Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.test('Vehicle status is restored', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "  pm.expect(data.vehicleStatus).to.eql(pm.environment.get('originalVehicleStatus'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleStatus\": \"{{originalVehicleStatus}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/staff/vehicles/{{vehicleId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "staff",
+                "vehicles",
+                "{{vehicleId}}",
+                "status"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

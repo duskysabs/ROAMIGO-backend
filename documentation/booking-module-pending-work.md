@@ -1,5 +1,7 @@
 # Booking Module: Pending Work
 
+**Current-state review:** October 27, 2026
+
 This module establishes the booking-foundation schema, durable quote flow, and
 customer booking API. It deliberately stops before any action that could
 confirm a payment, reserve a vehicle, or assign a driver.
@@ -8,24 +10,38 @@ confirm a payment, reserve a vehicle, or assign a driver.
 
 | Priority | Work item | Reason it remains pending |
 | --- | --- | --- |
-| Blocker | Generate, review, and apply the Prisma migration against Supabase Postgres. | The current hosted database contains only `user_profile`; credentials are still required to create and verify the booking tables safely. |
+| Blocker | Reconcile and verify the squashed Prisma migration baseline against the approved non-production database. | The repository now contains `000000000000_squashed_migrations`; the last recorded database verification predates that squash, so current migration history and representative schema checks must be recorded before another deployment. |
 | Blocker | Implement the external ML pricing-service HTTP client and persist pricing-calculation audit data. | The current pricing gateway intentionally fails closed until the other repository publishes its contract. |
 | Blocker | Implement PayMongo payment intent creation and signed webhook verification. | A quote is not payment confirmation; the booking remains `AWAITING_PAYMENT` until a verified payment event. |
 | Blocker | Add a restricted staff workflow for verified manual payments, if manual payments are supported. | Staff verification needs authorization, proof handling, and an audit trail. |
 | Blocker | Implement post-payment transactional assignment. | It must re-check availability and atomically create the vehicle-driver assignment so concurrent confirmations cannot double-book a pair. |
 | High | Add PostgreSQL-level overlap protection for vehicle and driver schedules. | Application checks are advisory before payment and cannot alone guarantee concurrency safety. |
 | High | Add integration/e2e tests using an isolated Supabase/Postgres database. | Current focused tests use mocks because no database credentials are available. |
-| Medium | Add customer cancellation, refund, receivables, notifications, travel-slip, and outsourcing workflows. | These ERD entities are modeled but do not yet expose business APIs. |
-| Medium | Create the full booking-module manual/API test matrix in `documentation/`. | This is deferred until the pending payment and assignment workflows define their final behavior. |
+| Medium | Add customer cancellation, refund, receivables, and travel-slip workflows. | These ERD entities are modeled but do not yet expose complete business APIs. |
+| Medium | Add temporary outsourced-driver accounts and booking-scoped operational access. | The review workflow records external resources, but account invitation, trip actions, expiry, and revocation are intentionally deferred. |
+| Medium | Extend the living manual/API test matrix for later payment, assignment, cancellation, and trip workflows. | The current checklist covers the payment-independent MVP; later workflows need cases after their final behavior is defined. |
+
+## Current verified implementation
+
+The payment-independent source includes route-backed quotes, deterministic
+pricing, single-use quote submission, customer-owned reads, Booking Review,
+Staff-recorded outsourced details, customer decisions, transition evidence,
+and a limited in-application notification subset.
+
+On October 27, 2026, the current source passed the build, lint, 63 unit tests,
+and 21 HTTP-level tests. The HTTP-level suite uses mocked application boundaries;
+it does not replace an isolated real-database integration suite.
 
 ## Current lifecycle boundary
 
-`POST /bookings/quote` validates the customer request, verifies there is a
-currently eligible vehicle-driver pair, and creates a server-owned quote that
-expires after ten minutes. `POST /bookings` accepts only that quote ID and a
-customer-supplied idempotency key. It rechecks availability, atomically claims
-the quote, stores the booking as `AWAITING_PAYMENT`, and records its initial
-booking transition. It creates no payment, reservation, or assignment.
+`POST /bookings/quote` validates the customer request, checks internal vehicle
+readiness, and creates a server-owned quote that expires after ten minutes. Its
+response reports `AVAILABLE` or `REVIEW_REQUIRED`; neither result reserves a
+resource. `POST /bookings` accepts the quote ID, a customer-supplied idempotency
+key, and an optional review opt-in. It rechecks availability and atomically
+claims the quote. Available requests enter `AWAITING_PAYMENT`; opted-in
+unavailable requests enter `BOOKING_REVIEW`. It creates no payment,
+reservation, or assignment.
 
 ## Deterministic pricing MVP boundary
 
@@ -47,11 +63,14 @@ The durable quote stores the validated request snapshot, price evidence, and
 for Custom Trips the server-resolved Geoapify route evidence, so the customer
 cannot submit a client-modified amount or route after reviewing a quote. A
 quote is consumed at most once and is bound to the created booking.
-The submission transaction records the initial `DRAFT` to
-`AWAITING_PAYMENT` transition. This is lifecycle evidence for the demo flow,
-not the complete transition policy. Booking Review, payment confirmation,
-cancellation, and assignment transitions still require their own authorized
-workflows and audit rules.
+The submission transaction records the initial `DRAFT` to either
+`AWAITING_PAYMENT` or `BOOKING_REVIEW`. This is lifecycle evidence for the demo
+flow, not the complete transition policy. Booking Review covers the customer
+request, Staff outsourcing record, customer decision, Staff rejection,
+transition evidence, and in-application notification subset. Payment
+confirmation, cancellation policy, temporary outsourced-driver access, and
+assignment transitions still require their own authorized workflows and audit
+rules.
 
 ## Master-data API boundary
 

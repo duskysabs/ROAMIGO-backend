@@ -1,132 +1,60 @@
 # Authentication Unit Tests
 
-## Overview
+**Current-state review:** October 27, 2026
 
-Authentication unit tests verify the behavior of `AuthService`,
-`AuthController`, and `SupabaseAuthGuard` in isolation. Supabase and other
-dependencies are mocked, so these tests do not make network requests or use real
-credentials.
+Authentication unit tests exercise application behavior with Supabase, Prisma,
+and NestJS request context replaced by controlled mocks.
 
-The authentication unit tests are stored in:
-
-```text
-test/unit/
-├── auth.service.spec.ts
-├── auth.controller.spec.ts
-└── supabase-auth.guard.spec.ts
-```
-
-## AuthService Tests
-
-File:
+Relevant files:
 
 ```text
 test/unit/auth.service.spec.ts
-```
-
-The test module provides the real `AuthService` and replaces `SupabaseService`
-with a mock client. The mock supplies fake `signInWithPassword()` and `getUser()`
-functions.
-
-### Successful login
-
-The mocked Supabase client returns a fake session and user. The test verifies
-that:
-
-- The email and password are passed to Supabase correctly.
-- The service returns the access token.
-- The service returns the refresh token.
-- The service returns the expiry and token type.
-- The service returns the expected user ID and email.
-
-### Failed login
-
-The mocked Supabase client returns no session and an authentication error. The
-test verifies that `AuthService` throws `UnauthorizedException`.
-
-### Valid access token
-
-The mocked `getUser()` function returns a fake user. The test verifies that:
-
-- The correct access token is passed to Supabase.
-- The expected user ID and email are returned.
-
-### Invalid access token
-
-The mocked `getUser()` function returns no user and an invalid-token error. The
-test verifies that `AuthService` throws `UnauthorizedException`.
-
-## SupabaseAuthGuard Tests
-
-File:
-
-```text
-test/unit/supabase-auth.guard.spec.ts
-```
-
-These tests create fake NestJS execution contexts and replace
-`AuthService.getUser()` with a mock.
-
-### Missing Authorization header
-
-The request contains no `Authorization` header. The test verifies that:
-
-- The request is rejected with `UnauthorizedException`.
-- `AuthService.getUser()` is not called.
-
-### Incorrect authentication scheme
-
-The request uses `Basic` instead of `Bearer`. The test verifies that:
-
-- The request is rejected with `UnauthorizedException`.
-- `AuthService.getUser()` is not called.
-
-### Valid Bearer token
-
-The request contains a valid fake Bearer token. The mocked authentication service
-returns a user. The test verifies that:
-
-- The guard returns `true`.
-- The token is passed to `AuthService.getUser()`.
-- The authenticated user is attached to `request.user`.
-
-### Invalid Bearer token
-
-The mocked authentication service rejects the fake token. The test verifies that
-the guard returns an unauthorized error and passes the extracted token to the
-authentication service.
-
-## AuthController Tests
-
-File:
-
-```text
 test/unit/auth.controller.spec.ts
+test/unit/supabase-auth.guard.spec.ts
+test/unit/login-rate-limit.guard.spec.ts
+test/unit/roles.guard.spec.ts
+test/unit/user-profiles.service.spec.ts
 ```
 
-The tests use the real `AuthController` with a mocked `AuthService`.
+## Covered behavior
 
-### Login delegation
+### Authentication service
 
-The test calls the controller's login method with a fake `LoginDto`. It verifies
-that the controller forwards the DTO to `AuthService.login()` and returns the
-service result.
+- Signup returning email-confirmation or profile-completion state
+- Successful password login
+- Invalid-credential rejection
+- Missing-profile login returning resumable onboarding state
+- Inactive-account sign-out and rejection
+- Valid and invalid access-token verification
 
-### Current authenticated user
+### Controllers and guards
 
-The test creates a fake request containing a user that would normally be attached
-by `SupabaseAuthGuard`. It verifies that the controller returns that user in the
-expected response structure.
+- Signup and login delegation
+- Current-user response shape
+- Missing, invalid, and non-Bearer authorization rejection
+- Valid-token request context
+- Role-free route access
+- Required-role access
+- Missing authentication and missing-profile-role rejection
 
-## Current Coverage
+### Rate limiting
 
-The authentication module currently has 10 unit tests:
+- Configured attempt limit
+- Independent tracking by client IP
+- New attempt window after expiry
 
-```text
-AuthService          4 tests
-SupabaseAuthGuard    4 tests
-AuthController       2 tests
-```
+### Customer profile provisioning
 
-These tests verify ROAMIGO's authentication behavior, not Supabase's internal
-implementation.
+- Active Customer profile and Customer record creation
+- Rejection of duplicate profiles
+- Input and persistence error handling
+- Profile updates without caller-controlled role or account status
+
+## Boundaries
+
+These tests prove ROAMIGO logic, not Supabase or PostgreSQL behavior. Database
+constraints, real authentication, transactions, and migration compatibility
+require isolated integration tests.
+
+On October 27, 2026, the complete unit suite passed 63 tests across 14 files in
+the merged Booking Review source.

@@ -1,112 +1,64 @@
-# Authentication End-to-End Tests
+# Authentication HTTP-Level Tests
 
-## Overview
+**Current-state review:** October 27, 2026
 
-Authentication end-to-end tests send HTTP requests through a NestJS testing
-application. They verify that routing, validation, controllers, guards, status
-codes, and response bodies work together.
+## Scope
 
-The authentication end-to-end tests are stored in:
+The authentication HTTP-level tests start a NestJS testing application and send
+requests through routing, validation, controllers, guards, and error mapping.
+Application services are overridden with mocks, so these tests do not contact
+Supabase or a real database.
+
+Relevant files:
 
 ```text
 test/e2e/auth.e2e-spec.ts
+test/e2e/auth-throttling.e2e-spec.ts
+test/e2e/user-profiles.e2e-spec.ts
 ```
 
-## Test Setup
+## Covered behavior
 
-The test creates a NestJS application using `AppModule`. It overrides
-`AuthService` with mocked `login()` and `getUser()` functions.
+### Signup and login
 
-The application also enables the same global `ValidationPipe` behavior used by
-the running backend:
+- Successful login response
+- Invalid email rejection
+- Authentication failure
+- Inactive-account rejection
+- Missing-profile login returning the profile-completion step
+- Signup followed by resumable onboarding
 
-- Whitelist declared DTO fields
-- Reject undeclared fields
-- Transform request data when appropriate
+### Current user and profile completion
 
-Because `AuthService` is mocked, these tests do not contact the real Supabase
-project and do not need real credentials.
+- Missing-token rejection
+- Authenticated current-user response
+- Customer profile completion for a token-authenticated user without a profile
+- Invalid-token rejection
+- Phone-number validation
+- Rejection of caller-controlled privileged roles
+- Administrator-only profile listing and denial of other roles
+- Rejection of malformed authenticated context without a profile role
 
-## Login Endpoint Tests
+### Rate limiting
 
-Endpoint:
+- Five configured login attempts followed by `429 Too Many Requests`
+- Unrelated routes remaining outside the strict login limit
 
-```http
-POST /auth/login
-```
+## Test setup requirements
 
-### Successful login
+The application module constructs Prisma and Supabase providers even when the
+tested service is mocked. The test environment therefore needs syntactically
+valid placeholder configuration, but the suite must not point at or mutate a
+real database.
 
-The mocked authentication service returns fake tokens and user information. The
-test verifies that the endpoint returns:
+The tests open temporary localhost ports through Supertest. Restricted execution
+environments must allow local loopback connections.
 
-- HTTP `200 OK`
-- An access token
-- A refresh token
-- Token expiry information
-- The token type
-- The authenticated user's ID and email
+## Current evidence
 
-### Invalid email validation
+On October 27, 2026, the complete HTTP-level suite passed 21 tests across four
+files, including the starter application endpoint test.
 
-The request contains an invalid email address. The test verifies that:
-
-- The endpoint returns HTTP `400 Bad Request`.
-- The response contains the email validation message.
-- `AuthService.login()` is not called because validation fails first.
-
-### Failed login
-
-The mocked authentication service throws `UnauthorizedException`. The test
-verifies that the endpoint returns HTTP `401 Unauthorized`.
-
-## Protected Endpoint Tests
-
-Endpoint:
-
-```http
-GET /auth/me
-```
-
-### Missing token
-
-The request does not include an `Authorization` header. The test verifies that:
-
-- The endpoint returns HTTP `401 Unauthorized`.
-- `AuthService.getUser()` is not called.
-
-### Valid token
-
-The request includes a fake Bearer token, and the mocked authentication service
-returns a fake user. The test verifies that:
-
-- The endpoint returns HTTP `200 OK`.
-- The response contains the expected user.
-- The access token is passed to `AuthService.getUser()`.
-
-## Current Coverage
-
-The authentication end-to-end file currently contains five tests:
-
-```text
-POST /auth/login
-├── successful login returns 200
-├── invalid email returns 400
-└── failed login returns 401
-
-GET /auth/me
-├── missing token returns 401
-└── valid token returns 200
-```
-
-The starter `test/app.e2e-spec.ts` separately verifies the application's default
-endpoint.
-
-## Real Supabase Verification
-
-These end-to-end tests intentionally mock `AuthService`. They verify the NestJS
-HTTP behavior but do not prove that Supabase is reachable.
-
-Real Supabase communication is currently checked manually with Postman. A future
-integration test may use a separate Supabase test project. Production accounts,
-keys, and databases must never be used for automated tests.
+This proves NestJS HTTP behavior with mocked application boundaries. It does not
+prove Supabase connectivity, Prisma persistence, migration correctness, or
+transactional behavior. Those require a separate isolated integration suite.
