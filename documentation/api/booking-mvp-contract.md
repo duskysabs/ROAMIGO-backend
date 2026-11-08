@@ -26,6 +26,10 @@ It does not reserve capacity.
 
 ## Customer bookings
 
+For later manual payment and initial assignment states, see
+[manual payments and initial assignment](./manual-payments-and-assignment.md).
+Booking submission itself remains payment-independent.
+
 - `POST /bookings` accepts `quoteId`, `idempotencyKey`, and the optional
   `requestReviewIfUnavailable` flag. It rechecks availability and consumes the
   unexpired quote once. An available internal vehicle creates the booking at

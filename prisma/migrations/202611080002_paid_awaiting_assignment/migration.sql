@@ -1,0 +1,1 @@
+ALTER TYPE "public"."BookingStatus" ADD VALUE 'PAID_AWAITING_ASSIGNMENT';

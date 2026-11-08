@@ -14,6 +14,7 @@ import {
   UserRole,
   VehicleStatus,
 } from '../generated/prisma/enums.js';
+import { eligiblePairsWhere } from './allocation-eligibility.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateDriverDto } from './dto/create-driver.dto.js';
 import { CreateVehicleDto } from './dto/create-vehicle.dto.js';
@@ -328,6 +329,7 @@ export class FleetService {
   }
 
   async updateVehicleStatus(id: string, vehicleStatus: VehicleStatus) {
+    await this.ensureNoActiveVehicleAssignment(id);
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id },
       include: {
@@ -357,6 +359,7 @@ export class FleetService {
   }
 
   async updateDriverStatus(id: string, driverStatus: DriverStatus) {
+    await this.ensureNoActiveDriverAssignment(id);
     const driver = await this.requireDriver(id);
 
     if (driverStatus === DriverStatus.AVAILABLE) {
@@ -374,6 +377,8 @@ export class FleetService {
   }
 
   async designateDriver(vehicleId: string, driverId?: string | null) {
+    await this.ensureNoActiveVehicleAssignment(vehicleId);
+    if (driverId) await this.ensureNoActiveDriverAssignment(driverId);
     const vehicle = await this.prisma.vehicle.findUnique({
       where: { id: vehicleId },
       include: { assignedDriver: true },
@@ -438,35 +443,7 @@ export class FleetService {
     }
 
     const vehicles = await this.prisma.vehicle.findMany({
-      where: {
-        vehicleTypeId: query.vehicleTypeId,
-        passengerCapacity: { gte: query.passengers },
-        isDeleted: false,
-        vehicleStatus: VehicleStatus.AVAILABLE,
-        assignedDriver: {
-          is: {
-            driverStatus: DriverStatus.AVAILABLE,
-            licenseExpiry: { gte: this.toUtcDate(end) },
-            staff: {
-              is: {
-                employmentStatus: EmploymentStatus.ACTIVE,
-                user: { is: { accountStatus: AccountStatus.ACTIVE } },
-              },
-            },
-          },
-        },
-        assignments: {
-          none: {
-            assignmentStatus: { in: [...ACTIVE_ASSIGNMENT_STATUSES] },
-            booking: {
-              is: {
-                startDatetime: { lt: end },
-                endDatetime: { gt: start },
-              },
-            },
-          },
-        },
-      },
+      where: eligiblePairsWhere({ vehicleTypeId: query.vehicleTypeId, passengerCount: query.passengers, startDatetime: start, endDatetime: end }),
       include: { assignedDriver: true, vehicleType: true },
     });
 

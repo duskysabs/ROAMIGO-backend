@@ -10,7 +10,6 @@ import {
   BookingStatus,
   BookingType,
   DriverStatus,
-  EmploymentStatus,
   PackageStatus,
   StopType,
   VehicleStatus,
@@ -440,38 +439,28 @@ describe('BookingsService', () => {
       } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(findCapacityMatch).toHaveBeenCalledWith({
-      where: {
+    expect(findCapacityMatch).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
         vehicleTypeId: '00000000-0000-4000-8000-000000000002',
         passengerCapacity: { gte: 20 },
         isDeleted: false,
         vehicleStatus: VehicleStatus.AVAILABLE,
-        assignedDriver: {
-          is: {
-            driverStatus: DriverStatus.AVAILABLE,
-            staff: { is: { employmentStatus: EmploymentStatus.ACTIVE } },
-          },
-        },
-        assignments: {
-          none: {
-            assignmentStatus: {
-              in: [
-                AssignmentStatus.RESERVED,
-                AssignmentStatus.ASSIGNED,
-                AssignmentStatus.ACKNOWLEDGED,
-              ],
-            },
-            booking: {
-              is: {
-                startDatetime: { lt: new Date('2026-10-01T10:30:00.000Z') },
-                endDatetime: { gt: new Date('2026-10-01T09:00:00.000Z') },
-              },
-            },
-          },
-        },
-      },
+        assignedDriver: { is: expect.objectContaining({
+          driverStatus: DriverStatus.AVAILABLE,
+          licenseExpiry: { gte: new Date('2026-10-01T00:00:00.000Z') },
+          assignments: { none: expect.objectContaining({
+            reservedFrom: { lt: new Date('2026-10-01T10:30:00.000Z') },
+            reservedUntil: { gt: new Date('2026-10-01T09:00:00.000Z') },
+          }) },
+        }) },
+        assignments: { none: expect.objectContaining({
+          assignmentStatus: { in: [AssignmentStatus.RESERVED, AssignmentStatus.ASSIGNED, AssignmentStatus.ACKNOWLEDGED] },
+          reservedFrom: { lt: new Date('2026-10-01T10:30:00.000Z') },
+          reservedUntil: { gt: new Date('2026-10-01T09:00:00.000Z') },
+        }) },
+      }),
       select: { id: true },
-    });
+    }));
     expect(quote).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });

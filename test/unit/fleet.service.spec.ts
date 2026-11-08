@@ -15,6 +15,9 @@ import {
 import { FleetService } from '../../src/fleet/fleet.service.js';
 
 describe('FleetService', () => {
+  const makeService = (client: Record<string, unknown>) => new FleetService({
+    bookingAssignment: { findFirst: vi.fn().mockResolvedValue(null) }, ...client,
+  } as never);
   const availabilityQuery = {
     start: '2030-10-08T08:00:00.000Z',
     end: '2030-10-08T10:00:00.000Z',
@@ -40,7 +43,7 @@ describe('FleetService', () => {
         passengerCapacity: 4,
       },
     ]);
-    const service = new FleetService({ vehicle: { findMany } } as never);
+    const service = makeService({ vehicle: { findMany } } as never);
 
     await expect(service.availability(availabilityQuery)).resolves.toEqual({
       eligible: [
@@ -68,7 +71,7 @@ describe('FleetService', () => {
   });
 
   it('returns a stable exclusion reason when no pair is eligible', async () => {
-    const service = new FleetService({
+    const service = makeService({
       vehicle: { findMany: vi.fn().mockResolvedValue([]) },
     } as never);
 
@@ -78,9 +81,20 @@ describe('FleetService', () => {
     });
   });
 
+  it('prevents readiness changes that bypass an active assignment', async () => {
+    const update = vi.fn();
+    const service = makeService({
+      bookingAssignment: { findFirst: vi.fn().mockResolvedValue({ id: 'active-assignment' }) },
+      vehicle: { update },
+    });
+    await expect(service.updateVehicleStatus('vehicle-id', VehicleStatus.UNAVAILABLE))
+      .rejects.toBeInstanceOf(ConflictException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('rejects an invalid availability interval before querying persistence', async () => {
     const findMany = vi.fn();
-    const service = new FleetService({ vehicle: { findMany } } as never);
+    const service = makeService({ vehicle: { findMany } } as never);
 
     await expect(
       service.availability({ ...availabilityQuery, end: availabilityQuery.start }),
@@ -90,7 +104,7 @@ describe('FleetService', () => {
 
   it('creates a vehicle as unavailable', async () => {
     const create = vi.fn().mockResolvedValue({ id: 'vehicle-id' });
-    const service = new FleetService({
+    const service = makeService({
       vehicleType: { findUnique: vi.fn().mockResolvedValue({ id: 'type-id' }) },
       vehicle: { create },
     } as never);
@@ -118,7 +132,7 @@ describe('FleetService', () => {
 
   it('creates a driver only from an eligible Staff record', async () => {
     const create = vi.fn().mockResolvedValue({ id: 'driver-id' });
-    const service = new FleetService({
+    const service = makeService({
       staff: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'staff-id',
@@ -147,7 +161,7 @@ describe('FleetService', () => {
   });
 
   it('rejects onboarding when the profile is not Staff', async () => {
-    const service = new FleetService({
+    const service = makeService({
       staff: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'staff-id',
@@ -168,7 +182,7 @@ describe('FleetService', () => {
   });
 
   it('maps a duplicate driver licence to a conflict response', async () => {
-    const service = new FleetService({
+    const service = makeService({
       staff: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'staff-id',
@@ -191,7 +205,7 @@ describe('FleetService', () => {
   });
 
   it('rejects silently replacing a vehicle designated driver', async () => {
-    const service = new FleetService({
+    const service = makeService({
       vehicle: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'vehicle-id',
@@ -216,7 +230,7 @@ describe('FleetService', () => {
   });
 
   it('rejects reusing a driver already paired to another vehicle', async () => {
-    const service = new FleetService({
+    const service = makeService({
       vehicle: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'vehicle-id',
@@ -241,7 +255,7 @@ describe('FleetService', () => {
   });
 
   it('requires an eligible pair before a vehicle becomes available', async () => {
-    const service = new FleetService({
+    const service = makeService({
       vehicle: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'vehicle-id',
@@ -257,7 +271,7 @@ describe('FleetService', () => {
   });
 
   it('requires a designated active vehicle before a driver becomes available', async () => {
-    const service = new FleetService({
+    const service = makeService({
       driver: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'driver-id',
@@ -274,7 +288,7 @@ describe('FleetService', () => {
   });
 
   it('blocks Staff users from listing deleted vehicles', async () => {
-    const service = new FleetService({} as never);
+    const service = makeService({} as never);
 
     await expect(
       service.listVehicles(
@@ -285,7 +299,7 @@ describe('FleetService', () => {
   });
 
   it('returns paginated vehicle results', async () => {
-    const service = new FleetService({
+    const service = makeService({
       vehicle: {
         findMany: vi.fn().mockResolvedValue([{ id: 'vehicle-id' }]),
         count: vi.fn().mockResolvedValue(21),

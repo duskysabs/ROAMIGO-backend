@@ -73,6 +73,13 @@ In addition to vehicle, Driver, employment, capacity, status, and schedule
 checks, the Driver licence must remain valid through the requested trip end
 date.
 
+Quotes, fleet availability and initial post-payment allocation now share the
+same eligibility predicate. It also checks the Driver account and licence,
+overlap for each resource independently, and unresolved maintenance. See
+[manual payment and allocation rules](./manual-payments-and-assignment.md).
+Status/pairing changes that invalidate an active assignment require recovery;
+the database also guards these changes against races.
+
 ## Administrator master-data operations
 
 ### Vehicles

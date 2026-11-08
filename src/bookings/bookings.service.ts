@@ -4,19 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { eligiblePairsWhere } from '../fleet/allocation-eligibility.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   AccountStatus,
-  AssignmentStatus,
   BookingStatus,
   BookingType,
-  DriverStatus,
-  EmploymentStatus,
   NotificationType,
   PackageStatus,
   StopType,
   UserRole,
-  VehicleStatus,
 } from '../generated/prisma/enums.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PricingQuoteGateway } from '../pricing/pricing-quote.gateway.js';
@@ -24,12 +21,6 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
 import { RoutingService } from '../routing/routing.service.js';
 import { SubmitBookingQuoteDto } from './dto/submit-booking-quote.dto.js';
-
-const ACTIVE_ASSIGNMENT_STATUSES = [
-  AssignmentStatus.RESERVED,
-  AssignmentStatus.ASSIGNED,
-  AssignmentStatus.ACKNOWLEDGED,
-];
 
 @Injectable()
 export class BookingsService {
@@ -502,31 +493,7 @@ export class BookingsService {
    */
   private async hasEligibleInternalVehicle(dto: CreateBookingDto) {
     const eligibleVehicle = await this.prisma.vehicle.findFirst({
-      where: {
-        vehicleTypeId: dto.vehicleTypeId,
-        passengerCapacity: { gte: dto.passengerCount },
-        isDeleted: false,
-        vehicleStatus: VehicleStatus.AVAILABLE,
-        assignedDriver: {
-          is: {
-            driverStatus: DriverStatus.AVAILABLE,
-            staff: { is: { employmentStatus: EmploymentStatus.ACTIVE } },
-          },
-        },
-        assignments: {
-          none: {
-            assignmentStatus: {
-              in: ACTIVE_ASSIGNMENT_STATUSES,
-            },
-            booking: {
-              is: {
-                startDatetime: { lt: new Date(dto.endDatetime) },
-                endDatetime: { gt: new Date(dto.startDatetime) },
-              },
-            },
-          },
-        },
-      },
+      where: eligiblePairsWhere({ vehicleTypeId: dto.vehicleTypeId, passengerCount: dto.passengerCount, startDatetime: new Date(dto.startDatetime), endDatetime: new Date(dto.endDatetime) }),
       select: { id: true },
     });
     return Boolean(eligibleVehicle);

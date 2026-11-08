@@ -13,6 +13,7 @@ import { BookingOptionsModule } from './booking-options/booking-options.module.j
 import { LocationsModule } from './locations/locations.module.js';
 import { RoutingModule } from './routing/routing.module.js';
 import { StaffModule } from './staff/staff.module.js';
+import { PaymentsModule } from './payments/payments.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -38,6 +39,7 @@ import { StaffModule } from './staff/staff.module.js';
     LocationsModule,
     RoutingModule,
     StaffModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
