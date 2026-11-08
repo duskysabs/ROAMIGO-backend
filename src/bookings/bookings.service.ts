@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -236,9 +237,10 @@ export class BookingsService {
   }
 
   async submitQuote(customerUserId: string, command: SubmitBookingQuoteDto) {
-    const existing = await this.prisma.booking.findUnique({
-      where: { idempotencyKey: command.idempotencyKey },
-    });
+    if (!command.idempotencyKey?.trim()) {
+      throw new BadRequestException('An idempotency key is required');
+    }
+    const existing = await this.findSubmission(this.prisma, customerUserId, command);
     if (existing) return existing;
     const quote = await this.prisma.bookingQuote.findFirst({
       where: {
@@ -249,10 +251,13 @@ export class BookingsService {
       },
       include: { pricingConfiguration: true },
     });
-    if (!quote)
+    if (!quote) {
+      const completed = await this.findSubmission(this.prisma, customerUserId, command);
+      if (completed) return completed;
       throw new BadRequestException(
         'Quote is expired, consumed, or unavailable',
       );
+    }
     const snapshot = quote.requestSnapshot as unknown as CreateBookingDto;
     // Recheck availability immediately before durable consumption. An
     // unavailable internal vehicle may enter the explicit review path, but it
@@ -269,106 +274,134 @@ export class BookingsService {
       ? BookingStatus.AWAITING_PAYMENT
       : BookingStatus.BOOKING_REVIEW;
     const stops = snapshot.stops ?? [];
-    return this.prisma.$transaction(async (tx) => {
-      const retry = await tx.booking.findUnique({
-        where: { idempotencyKey: command.idempotencyKey },
-      });
-      if (retry) return retry;
-      // Claim before writing the booking so only one request can consume a quote.
-      // A failed transaction rolls this claim back with the booking write.
-      const claimed = await tx.bookingQuote.updateMany({
-        where: {
-          id: quote.id,
-          customerUserId,
-          consumedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        data: { consumedAt: new Date() },
-      });
-      if (claimed.count !== 1)
-        throw new BadRequestException(
-          'Quote is expired, consumed, or unavailable',
-        );
-      const booking = await tx.booking.create({
-        data: {
-          customerUserId,
-          idempotencyKey: command.idempotencyKey,
-          vehicleTypeId: snapshot.vehicleTypeId,
-          bookingType: snapshot.bookingType,
-          tourPackageId: snapshot.tourPackageId,
-          startDatetime: new Date(snapshot.startDatetime),
-          endDatetime: new Date(snapshot.endDatetime),
-          passengerCount: snapshot.passengerCount,
-          bookingStatus: initialStatus,
-          totalDistanceKm: quote.totalDistanceKm,
-          estimatedDurationMinutes: quote.estimatedDurationMinutes,
-          finalQuotedPrice: quote.finalQuotedPrice,
-          notes: snapshot.notes,
-          stops: {
-            create: stops.map((stop: any, index) => ({
-              sequenceNumber: index + 1,
-              stopType: stop.stopType,
-              locationName: stop.locationName,
-              formattedAddress: stop.formattedAddress,
-              latitude: stop.latitude,
-              longitude: stop.longitude,
-              activity: stop.activity,
-              plannedStopMinutes: stop.plannedStopMinutes,
-            })),
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const retry = await this.findSubmission(tx, customerUserId, command);
+        if (retry) return retry;
+        // Claim before writing the booking so only one request can consume a quote.
+        // A failed transaction rolls this claim back with the booking write.
+        const claimed = await tx.bookingQuote.updateMany({
+          where: {
+            id: quote.id,
+            customerUserId,
+            consumedAt: null,
+            expiresAt: { gt: new Date() },
           },
-          pricingCalculations: {
-            create: {
-              pricingConfigId: quote.pricingConfigId,
-              baseRateUsed: quote.pricingConfiguration.baseRate,
-              distanceKm: quote.totalDistanceKm,
-              tripDurationMinutes: quote.estimatedDurationMinutes,
-              bookingDemandCount: 0,
-              vehicleAvailability: hasInternalVehicle ? 1 : 0,
-              driverAvailability: hasInternalVehicle ? 1 : 0,
-              suggestedAmount: quote.finalQuotedPrice,
-              adjustmentPercentage: 0,
-              modelVersion: 'admin-fixed-v1',
+          data: { consumedAt: new Date() },
+        });
+        if (claimed.count !== 1) {
+          const completed = await this.findSubmission(tx, customerUserId, command);
+          if (completed) return completed;
+          throw new BadRequestException(
+            'Quote is expired, consumed, or unavailable',
+          );
+        }
+        const booking = await tx.booking.create({
+          data: {
+            customerUserId,
+            idempotencyKey: command.idempotencyKey,
+            vehicleTypeId: snapshot.vehicleTypeId,
+            bookingType: snapshot.bookingType,
+            tourPackageId: snapshot.tourPackageId,
+            startDatetime: new Date(snapshot.startDatetime),
+            endDatetime: new Date(snapshot.endDatetime),
+            passengerCount: snapshot.passengerCount,
+            bookingStatus: initialStatus,
+            totalDistanceKm: quote.totalDistanceKm,
+            estimatedDurationMinutes: quote.estimatedDurationMinutes,
+            finalQuotedPrice: quote.finalQuotedPrice,
+            notes: snapshot.notes,
+            stops: {
+              create: stops.map((stop: any, index) => ({
+                sequenceNumber: index + 1,
+                stopType: stop.stopType,
+                locationName: stop.locationName,
+                formattedAddress: stop.formattedAddress,
+                latitude: stop.latitude,
+                longitude: stop.longitude,
+                activity: stop.activity,
+                plannedStopMinutes: stop.plannedStopMinutes,
+              })),
+            },
+            pricingCalculations: {
+              create: {
+                pricingConfigId: quote.pricingConfigId,
+                baseRateUsed: quote.pricingConfiguration.baseRate,
+                distanceKm: quote.totalDistanceKm,
+                tripDurationMinutes: quote.estimatedDurationMinutes,
+                bookingDemandCount: 0,
+                vehicleAvailability: hasInternalVehicle ? 1 : 0,
+                driverAvailability: hasInternalVehicle ? 1 : 0,
+                suggestedAmount: quote.finalQuotedPrice,
+                adjustmentPercentage: 0,
+                modelVersion: 'admin-fixed-v1',
+              },
             },
           },
-        },
-      });
-      await tx.bookingQuote.update({
-        where: { id: quote.id },
-        data: { bookingId: booking.id },
-      });
-      await tx.bookingTransition.create({
-        data: {
-          bookingId: booking.id,
-          actorUserId: customerUserId,
-          previousState: BookingStatus.DRAFT,
-          nextState: initialStatus,
-          reason: hasInternalVehicle
-            ? 'Customer accepted server-issued quote'
-            : 'Customer requested staff review because no internal vehicle was available',
-        },
-      });
-      if (initialStatus === BookingStatus.BOOKING_REVIEW) {
-        const recipients = await tx.userProfile.findMany({
-          where: {
-            role: { in: [UserRole.ADMIN, UserRole.STAFF] },
-            accountStatus: AccountStatus.ACTIVE,
-          },
-          select: { userId: true },
         });
-        if (recipients.length) {
-          await tx.notification.createMany({
-            data: recipients.map(({ userId }) => ({
-              recipientUserId: userId,
-              notificationType: NotificationType.BOOKING,
-              title: 'Booking requires resource review',
-              message: `Booking ${booking.id} requires an outsourced vehicle and driver review.`,
-              actionUrl: `/staff/booking-reviews/${booking.id}`,
-            })),
+        await tx.bookingQuote.update({
+          where: { id: quote.id },
+          data: { bookingId: booking.id },
+        });
+        await tx.bookingTransition.create({
+          data: {
+            bookingId: booking.id,
+            actorUserId: customerUserId,
+            previousState: BookingStatus.DRAFT,
+            nextState: initialStatus,
+            reason: hasInternalVehicle
+              ? 'Customer accepted server-issued quote'
+              : 'Customer requested staff review because no internal vehicle was available',
+          },
+        });
+        if (initialStatus === BookingStatus.BOOKING_REVIEW) {
+          const recipients = await tx.userProfile.findMany({
+            where: {
+              role: { in: [UserRole.ADMIN, UserRole.STAFF] },
+              accountStatus: AccountStatus.ACTIVE,
+            },
+            select: { userId: true },
           });
+          if (recipients.length) {
+            await tx.notification.createMany({
+              data: recipients.map(({ userId }) => ({
+                recipientUserId: userId,
+                notificationType: NotificationType.BOOKING,
+                title: 'Booking requires resource review',
+                message: `Booking ${booking.id} requires an outsourced vehicle and driver review.`,
+                actionUrl: `/staff/booking-reviews/${booking.id}`,
+              })),
+            });
+          }
         }
+        return booking;
+      });
+    } catch (error) {
+      // A competing request may commit the same customer key after our lookup.
+      if (typeof error === 'object' && error !== null &&
+          'code' in error && error.code === 'P2002') {
+        const completed = await this.findSubmission(this.prisma, customerUserId, command);
+        if (completed) return completed;
       }
-      return booking;
+      throw error;
+    }
+  }
+
+  private async findSubmission(
+    client: Pick<Prisma.TransactionClient, 'booking'>,
+    customerUserId: string,
+    command: SubmitBookingQuoteDto,
+  ) {
+    const existing = await client.booking.findFirst({
+      where: { customerUserId, idempotencyKey: command.idempotencyKey },
+      include: { quote: { select: { id: true } } },
     });
+    if (!existing) return null;
+    if (existing.quote?.id !== command.quoteId) {
+      throw new ConflictException('Idempotency key is already bound to another quote');
+    }
+    const { quote: _quote, ...booking } = existing;
+    return booking;
   }
 
   private validateCreateRequest(dto: CreateBookingDto) {
