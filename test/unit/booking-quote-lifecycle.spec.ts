@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { BookingsService } from '../../src/bookings/bookings.service.js';
 import {
@@ -37,9 +37,9 @@ describe('BookingsService quote lifecycle', () => {
   };
 
   it('returns the original booking for a repeated idempotency key', async () => {
-    const existing = { id: 'booking-existing' };
+    const existing = { id: 'booking-existing', quote: { id: command.quoteId } };
     const prisma = {
-      booking: { findUnique: vi.fn().mockResolvedValue(existing) },
+      booking: { findFirst: vi.fn().mockResolvedValue(existing) },
       bookingQuote: { findFirst: vi.fn() },
     };
     const service = new BookingsService(
@@ -50,13 +50,13 @@ describe('BookingsService quote lifecycle', () => {
 
     await expect(
       service.submitQuote('00000000-0000-4000-8000-000000000103', command),
-    ).resolves.toBe(existing);
+    ).resolves.toEqual({ id: 'booking-existing' });
     expect(prisma.bookingQuote.findFirst).not.toHaveBeenCalled();
   });
 
   it('rejects an expired, consumed, or inaccessible quote', async () => {
     const prisma = {
-      booking: { findUnique: vi.fn().mockResolvedValue(null) },
+      booking: { findFirst: vi.fn().mockResolvedValue(null) },
       bookingQuote: { findFirst: vi.fn().mockResolvedValue(null) },
     };
     const service = new BookingsService(
@@ -70,12 +70,69 @@ describe('BookingsService quote lifecycle', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects reuse of the customer key for another quote', async () => {
+    const prisma = {
+      booking: { findFirst: vi.fn().mockResolvedValue({
+        id: 'existing', quote: { id: 'different-quote' },
+      }) },
+    };
+    const service = new BookingsService(prisma as never, {} as never, {} as never);
+    await expect(service.submitQuote('customer', command)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('does not return another customer booking when they use the same key', async () => {
+    const prisma = {
+      booking: { findFirst: vi.fn(({ where }) => Promise.resolve(
+        where.customerUserId === 'other-customer'
+          ? { id: 'private-booking', quote: { id: command.quoteId } }
+          : null,
+      )) },
+      bookingQuote: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const service = new BookingsService(prisma as never, {} as never, {} as never);
+    await expect(service.submitQuote('customer', command)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.booking.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { customerUserId: 'customer', idempotencyKey: command.idempotencyKey },
+    }));
+  });
+
+  it.each(['', '   '])('rejects a blank key before querying the database', async (key) => {
+    const service = new BookingsService({} as never, {} as never, {} as never);
+    await expect(service.submitQuote('customer', { ...command, idempotencyKey: key }))
+      .rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('returns a matching retry that commits while the quote is being read', async () => {
+    const prisma = {
+      booking: { findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'concurrent-booking', quote: { id: command.quoteId },
+      }) },
+      bookingQuote: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const service = new BookingsService(prisma as never, {} as never, {} as never);
+    await expect(service.submitQuote('customer', command)).resolves.toEqual({ id: 'concurrent-booking' });
+  });
+
+  it('returns a matching retry after a competing unique-key insert commits', async () => {
+    const prisma = {
+      booking: { findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'winner', quote: { id: command.quoteId },
+      }) },
+      bookingQuote: { findFirst: vi.fn().mockResolvedValue({ requestSnapshot: snapshot }) },
+      $transaction: vi.fn().mockRejectedValue({ code: 'P2002' }),
+    };
+    const service = new BookingsService(prisma as never, {} as never, {} as never);
+    (service as any).validateBookingSelections = vi.fn();
+    (service as any).hasEligibleInternalVehicle = vi.fn().mockResolvedValue(true);
+    await expect(service.submitQuote('customer', command)).resolves.toEqual({ id: 'winner' });
+  });
+
   it('claims the quote, persists the booking, and records the initial transition', async () => {
     const transaction = vi.fn();
-    const outerFindUnique = vi.fn().mockResolvedValue(null);
+    const outerFindFirst = vi.fn().mockResolvedValue(null);
     const tx = {
       booking: {
-        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ id: 'booking-new' }),
       },
       bookingQuote: {
@@ -88,7 +145,7 @@ describe('BookingsService quote lifecycle', () => {
       callback(tx),
     );
     const prisma = {
-      booking: { findUnique: outerFindUnique },
+      booking: { findFirst: outerFindFirst },
       bookingQuote: {
         findFirst: vi.fn().mockResolvedValue({
           id: command.quoteId,
@@ -137,7 +194,7 @@ describe('BookingsService quote lifecycle', () => {
   it('creates a review booking when no internal vehicle is available and the customer opts in', async () => {
     const tx = {
       booking: {
-        findUnique: vi.fn().mockResolvedValue(null),
+        findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ id: 'booking-review' }),
       },
       bookingQuote: {
@@ -149,7 +206,7 @@ describe('BookingsService quote lifecycle', () => {
       notification: { createMany: vi.fn() },
     };
     const prisma = {
-      booking: { findUnique: vi.fn().mockResolvedValue(null) },
+      booking: { findFirst: vi.fn().mockResolvedValue(null) },
       bookingQuote: {
         findFirst: vi.fn().mockResolvedValue({
           id: command.quoteId,

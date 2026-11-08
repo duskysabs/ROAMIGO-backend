@@ -425,7 +425,7 @@ model Booking {
   estimatedDurationMinutes Int           @map("estimated_duration_minutes")
   finalQuotedPrice         Decimal       @db.Decimal(12, 2) @map("final_quoted_price")
   notes                    String?       @db.Text
-  idempotencyKey           String?       @unique @db.VarChar(100) @map("idempotency_key")
+  idempotencyKey           String?       @db.VarChar(100) @map("idempotency_key")
   createdAt                DateTime      @default(now()) @db.Timestamptz(3) @map("created_at")
   updatedAt                DateTime      @updatedAt @db.Timestamptz(3) @map("updated_at")
 
@@ -443,6 +443,7 @@ model Booking {
   transitions              BookingTransition[]
 
   @@index([customerUserId, createdAt])
+  @@unique([customerUserId, idempotencyKey])
   @@index([bookingStatus, startDatetime])
   @@map("booking")
   @@schema("public")

@@ -31,8 +31,13 @@ It does not reserve capacity.
   unexpired quote once. An available internal vehicle creates the booking at
   `AWAITING_PAYMENT`. When none is available, the customer must send
   `requestReviewIfUnavailable: true`; the booking is then created at
-  `BOOKING_REVIEW`. Retrying the same idempotency key returns the original
-  booking rather than creating another record.
+  `BOOKING_REVIEW`. Retrying the same customer-scoped idempotency key and quote
+  returns the original booking rather than creating another record. Keys must
+  contain non-whitespace text. Different customers may use the same key.
+  Reusing a customer key for a different quote returns `409`, including when
+  the original quote has expired. The review opt-in is evaluated only for the
+  first accepted submission; changing it on a matching retry cannot change the
+  accepted booking. Legacy keys without a linked quote fail closed with `409`.
 - `GET /bookings/me?status=&cursor=&limit=` returns a customer-owned page.
   `limit` defaults to 20 and is capped at 50.
 - `GET /bookings/:bookingId` returns only a booking owned by the caller. A
