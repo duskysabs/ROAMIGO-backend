@@ -15,10 +15,10 @@ initial internal allocation. See [the payment contract](./api/manual-payments-an
 | Later phase | Integrate the external ML pricing service with guardrails. | Admin-managed deterministic pricing is implemented; FastAPI remains #15 and is not required for the manual-payment slice. |
 | Optional provider | Implement PayMongo checkout and signed webhook verification if selected. | Manual payment is the approved first path. Personal onboarding and enabled live capabilities are external account decisions. |
 | High | Complete the broader payment workflow in #16. | Staff-recorded receipts, review, audit and a durable allocation request exist. Customer proof storage, deadlines and provider automation remain. |
-| High | Complete assignment lifecycle and recovery in #17/#25. | Initial internal allocation and paid-awaiting-assignment recovery requests exist. Replacement history, complete turnaround/document policies and external fulfilment remain. |
+| High | Complete assignment lifecycle and recovery in #17/#25. | Initial internal allocation and paid-awaiting-assignment recovery requests exist. Decline/timeout replacement history exists in #57. Complete turnaround/document policies, general recovery and external fulfilment remain. |
 | High | Apply and verify the new overlap and payment migrations in an isolated database. | Exclusion constraints and resource guards are authored, not executed or proven in this review. |
 | High | Run the new local Postgres suite and extend integration coverage. | Manual-payment concurrency cases are authored but not run; hosted/provider and full booking integration remain unverified. |
-| Medium | Add customer cancellation, refund, receivables, and travel-slip workflows. | These ERD entities are modeled but do not yet expose complete business APIs. |
+| Medium | Add customer cancellation, refund and receivables workflows. | Aftercare remains modeled without complete business APIs. Initial Driver travel slips and completion snapshots are implemented in #57. |
 | Medium | Add temporary outsourced-driver accounts and booking-scoped operational access. | The review workflow records external resources, but account invitation, trip actions, expiry, and revocation are intentionally deferred. |
 | Medium | Extend the living manual/API test matrix for later payment, assignment, cancellation, and trip workflows. | The current checklist covers the payment-independent MVP; later workflows need cases after their final behavior is defined. |
 

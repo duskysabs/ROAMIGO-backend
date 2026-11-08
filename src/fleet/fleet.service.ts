@@ -517,8 +517,8 @@ export class FleetService {
     employmentStatus: EmploymentStatus;
     user: { role: UserRole; accountStatus: AccountStatus };
   }) {
-    if (staff.user.role !== UserRole.STAFF) {
-      throw new BadRequestException('Only a Staff profile can be onboarded as a driver');
+    if (staff.user.role !== UserRole.STAFF && staff.user.role !== UserRole.DRIVER) {
+      throw new BadRequestException('A Staff or Driver profile is required');
     }
     if (staff.employmentStatus !== EmploymentStatus.ACTIVE) {
       throw new BadRequestException('Driver Staff record must be active');

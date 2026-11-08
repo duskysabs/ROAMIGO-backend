@@ -5,7 +5,7 @@ import { BookingStatus } from '../../src/generated/prisma/enums.js';
 describe('Paid booking allocation', () => {
   function setup() {
     const booking = {
-      id: 'booking', vehicleTypeId: 'van', passengerCount: 4,
+      id: 'booking', customerUserId: 'customer', vehicleTypeId: 'van', passengerCount: 4,
       startDatetime: new Date('2099-01-01T08:00:00Z'), endDatetime: new Date('2099-01-01T10:00:00Z'),
       createdAt: new Date('2098-12-01'), bookingStatus: BookingStatus.PAID_AWAITING_ASSIGNMENT,
       finalQuotedPrice: '1200.00', outsourcedDetails: null,
@@ -15,20 +15,27 @@ describe('Paid booking allocation', () => {
       $queryRaw: vi.fn(),
       assignmentRequest: { findUnique: vi.fn().mockResolvedValue(request), findFirst: vi.fn().mockResolvedValue(null), update: vi.fn() },
       payment: { findFirst: vi.fn().mockResolvedValue({ id: 'paid-receipt' }) },
-      vehicle: { findMany: vi.fn().mockResolvedValue([{ id: 'vehicle' }]), findFirst: vi.fn().mockResolvedValue({ id: 'vehicle', assignedDriverId: 'driver' }) },
-      bookingAssignment: { create: vi.fn() }, booking: { update: vi.fn() }, bookingTransition: { create: vi.fn() },
+      vehicle: { findMany: vi.fn().mockResolvedValue([{ id: 'vehicle' }]), findFirst: vi.fn().mockResolvedValue({ id: 'vehicle', assignedDriverId: 'driver', assignedDriver: { staff: { userId: 'driver-user' } } }) },
+      bookingAssignment: { create: vi.fn().mockResolvedValue({ id: 'assignment' }), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn() },
+      driverEvent: { create: vi.fn() }, notification: { createMany: vi.fn() },
+      booking: { update: vi.fn() }, bookingTransition: { create: vi.fn() },
     };
     const prisma = { $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)) };
-    return { service: new AssignmentsService(prisma as never), tx, prisma, booking, request };
+    return { service: new AssignmentsService(prisma as never, { deadline: (at: Date) => new Date(at.getTime() + 120 * 60000) } as never), tx, prisma, booking, request };
   }
 
-  it('creates one interval-bound assignment and confirms only after allocation', async () => {
+  it('creates one interval-bound assignment and dispatches after allocation', async () => {
     const { service, tx, booking } = setup();
     await expect(service.process('booking')).resolves.toEqual({ bookingId: 'booking', status: 'ASSIGNED', reason: null });
     expect(tx.bookingAssignment.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       vehicleId: 'vehicle', driverId: 'driver', reservedFrom: booking.startDatetime, reservedUntil: booking.endDatetime,
     }) });
     expect(tx.booking.update).toHaveBeenCalledWith({ where: { id: 'booking' }, data: { bookingStatus: BookingStatus.CONFIRMED } });
+    expect(tx.booking.update).toHaveBeenCalledWith({ where: { id: 'booking' }, data: { bookingStatus: BookingStatus.DISPATCHED } });
+    expect(tx.notification.createMany).toHaveBeenCalledWith({ data: expect.arrayContaining([
+      expect.objectContaining({ recipientUserId: 'driver-user', actionUrl: '/driver/assignments/assignment' }),
+      expect.objectContaining({ recipientUserId: 'customer' }),
+    ]) });
     expect(tx.bookingAssignment.create.mock.invocationCallOrder[0]).toBeLessThan(tx.booking.update.mock.invocationCallOrder[0]!);
   });
 
@@ -63,7 +70,7 @@ describe('Paid booking allocation', () => {
 
   it('does not recreate a completed assignment request', async () => {
     const { service, tx, request } = setup();
-    tx.assignmentRequest.findUnique.mockResolvedValue({ ...request, completedAt: new Date() } as never);
+    tx.assignmentRequest.findUnique.mockResolvedValue({ ...request, booking: { ...request.booking, bookingStatus: BookingStatus.DISPATCHED }, completedAt: new Date() } as never);
     await expect(service.process('booking')).resolves.toMatchObject({ status: 'ASSIGNED' });
     expect(tx.bookingAssignment.create).not.toHaveBeenCalled();
   });
@@ -80,5 +87,20 @@ describe('Paid booking allocation', () => {
     tx.payment.findFirst.mockResolvedValue(null as never);
     await expect(service.process('booking')).resolves.toMatchObject({ status: 'PENDING', reason: 'FULL_PAYMENT_REQUIRED' });
     expect(tx.bookingAssignment.create).not.toHaveBeenCalled();
+  });
+
+  it('does not reuse a Driver who already declined that booking', async () => {
+    const { service, tx } = setup();
+    tx.bookingAssignment.findMany.mockResolvedValue([{ driverId: 'declined-driver' }] as never);
+    await service.process('booking');
+    expect(tx.vehicle.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignedDriverId: { notIn: ['declined-driver'] } }) }));
+  });
+
+  it('persists a two-hour dispatch deadline with its system event', async () => {
+    const { service, tx } = setup();
+    await service.process('booking');
+    const write = tx.bookingAssignment.update.mock.calls[0]![0];
+    expect(write.data.responseDeadline.getTime() - write.data.dispatchedAt.getTime()).toBe(120 * 60000);
+    expect(tx.driverEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ actorSource: 'SYSTEM', action: 'DISPATCHED' }) });
   });
 });

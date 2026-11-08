@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { UserRole } from '../../generated/prisma/enums.js';
+import { UserRole } from '../../generated/prisma/enums.js';
 import { ROLES_KEY } from '../constants/roles.constants.js';
 import type { AuthenticatedRequest } from './supabase-auth.guard.js';
 
@@ -30,7 +30,8 @@ export class RolesGuard implements CanActivate {
       throw new UnauthorizedException('Authenticated user not found');
     }
 
-    const userRole = request.user.profile?.role;
+    // Driver linkage is loaded from the database by authentication, never from a request field.
+    const userRole = request.user.isDriver ? UserRole.DRIVER : request.user.profile?.role;
 
     if (!userRole || !requiredRoles.includes(userRole)) {
       throw new ForbiddenException(

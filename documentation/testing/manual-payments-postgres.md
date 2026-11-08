@@ -52,6 +52,11 @@ rejected. These tests are excluded from npm test and npm run test:e2e.
 Cases cover concurrent approval of one receipt, one durable request/decision,
 immutable audit, deterministic ordering of overlapping paid requests, overlap
 constraints outside the allocator, adjacent intervals and active resource guards.
+The Driver extension also covers automatic dispatch, cross-Driver ownership,
+decline/replacement history, once-only timeout events, trip completion and
+turnaround holds. The shared-role access case requires the disposable cluster
+owner to be able to SET ROLE authenticated; do not grant that ability to a
+production application identity for testing.
 HTTP tests are separate; this database suite does not prove hosted Supabase
 authorization, real provider delivery or deployment behavior.
 

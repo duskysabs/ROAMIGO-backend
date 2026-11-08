@@ -15,6 +15,11 @@ import {
 export class UserProfilesService {
     constructor(private readonly prisma: PrismaService) {}
 
+    async hasDriverProfile(userId: string) {
+        const driver = await this.prisma.driver.findFirst({ where: { staff: { is: { userId } } }, select: { id: true } });
+        return Boolean(driver);
+    }
+
     findByUserId(userId: string) {
         return this.prisma.userProfile.findUnique({
             where: {

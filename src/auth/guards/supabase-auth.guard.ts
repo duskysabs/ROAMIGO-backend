@@ -13,6 +13,7 @@ type AuthenticatedUser = {
   id: string;
   email?: string;
   profile: UserProfile;  
+  isDriver?: boolean;
 };
 
 export type AuthenticatedRequest = Request & { user?: AuthenticatedUser };

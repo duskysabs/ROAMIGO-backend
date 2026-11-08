@@ -100,10 +100,15 @@ way that changes their type/capacity or be deleted.
 - `POST /admin/fleet/drivers/:driverId/deactivate`
 
 New Drivers start `UNAVAILABLE`. The Staff record must be active, have an active
-user account with the `STAFF` role, and not already have a Driver record.
+user account with the `STAFF` or `DRIVER` role, and not already have a Driver record.
 Licence numbers are normalized to uppercase and are database-unique. Driver
 deactivation removes the pairing and makes the paired vehicle unavailable.
 Drivers with active booking assignments cannot be deactivated or unpaired.
+
+Active trip and turnaround holds additionally block resource reuse and ordinary
+availability overrides, including after the reserved interval ends. Driver-linked
+STAFF identities receive Driver permissions and cannot call these management
+routes. See [Driver execution](./driver-execution-contract.md).
 
 ## Database migration
 
