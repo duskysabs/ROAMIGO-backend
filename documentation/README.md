@@ -6,6 +6,8 @@ This directory contains the technical documentation for the ROAMIGO backend.
 
 ### Current state
 
+- [Implementation tracker, November 8](./audit-report/implementation-tracker-2026-11-08.md): source coverage, open-issue reconciliation and verification limits.
+
 - [MVP progress report](./audit-report/mvp-progress-report-100526.md) — Current implemented boundary, verification evidence, and payment-independent next work.
 - [Booking module pending work](./booking-module-pending-work.md) — Production gaps and explicit lifecycle boundaries.
 
@@ -20,6 +22,9 @@ This directory contains the technical documentation for the ROAMIGO backend.
 - [Capstone ERD alignment review](./architecture/capstone-erd-alignment-review.md) — Implemented deviations, migration guardrails, and schema decisions.
 
 ### Booking API
+
+- [Manual payments and initial assignment](./api/manual-payments-and-assignment.md): full-payment verification, operator access and durable allocation requests.
+- [Manual payment database verification](./testing/manual-payments-postgres.md): migration preflight and isolated database checks.
 
 - [Booking MVP contract](./api/booking-mvp-contract.md) — Customer catalog, quote preview, booking, and state semantics.
 - [Fleet management contract](./api/fleet-management-contract.md) — Vehicle and Driver master data, pairing, readiness, and availability.

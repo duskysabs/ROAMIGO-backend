@@ -108,6 +108,7 @@ enum BookingStatus {
   SUBMITTED
   VALIDATED
   AWAITING_PAYMENT
+  PAID_AWAITING_ASSIGNMENT
   BOOKING_REVIEW
   CONFIRMED
   DISPATCHED
@@ -282,6 +283,8 @@ model UserProfile {
   notifications Notification[]
   bookingQuotes BookingQuote[]
   bookingTransitions BookingTransition[]
+  paymentAudits PaymentAudit[]
+  assignmentRequests AssignmentRequest[]
   authUser      AuthUser              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("user_profile")
@@ -441,6 +444,7 @@ model Booking {
   outsourcedDetails        OutsourcedDetails?
   quote                    BookingQuote?
   transitions              BookingTransition[]
+  assignmentRequest        AssignmentRequest?
 
   @@index([customerUserId, createdAt])
   @@unique([customerUserId, idempotencyKey])
@@ -525,6 +529,8 @@ model BookingAssignment {
   bookingId        String           @unique @db.Uuid @map("booking_id")
   assignmentStatus AssignmentStatus @map("assignment_status")
   assignedAt       DateTime         @default(now()) @db.Timestamptz(3) @map("assigned_at")
+  reservedFrom     DateTime         @db.Timestamptz(3) @map("reserved_from")
+  reservedUntil    DateTime         @db.Timestamptz(3) @map("reserved_until")
 
   vehicle          Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
   driver           Driver           @relation(fields: [driverId], references: [id], onDelete: Restrict)
@@ -615,10 +621,46 @@ model Payment {
   recordedByStaff   Staff?         @relation("PaymentRecorder", fields: [recordedByStaffId], references: [id], onDelete: SetNull)
   proofs            PaymentProof[]
   refunds           Refund[]
+  audits            PaymentAudit[]
 
   @@index([bookingId, paymentStatus])
   @@unique([provider, providerReference])
   @@map("payment")
+  @@schema("public")
+}
+
+model PaymentAudit {
+  id            String        @id @default(uuid()) @db.Uuid @map("payment_audit_id")
+  paymentId     String        @db.Uuid @map("payment_id")
+  actorUserId   String        @db.Uuid @map("actor_user_id")
+  action        String        @db.VarChar(20)
+  actorRole     UserRole      @map("actor_role")
+  previousState PaymentStatus? @map("previous_state")
+  nextState     PaymentStatus @map("next_state")
+  reason        String        @db.VarChar(500)
+  occurredAt    DateTime      @default(now()) @db.Timestamptz(3) @map("occurred_at")
+
+  payment       Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  actor         UserProfile   @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
+
+  @@unique([paymentId, action])
+  @@map("payment_audit")
+  @@schema("public")
+}
+
+model AssignmentRequest {
+  bookingId     String      @id @db.Uuid @map("booking_id")
+  actorUserId   String      @db.Uuid @map("actor_user_id")
+  completedAt   DateTime?   @db.Timestamptz(3) @map("completed_at")
+  attempts      Int         @default(0)
+  lastFailure   String?     @db.VarChar(100) @map("last_failure")
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3) @map("created_at")
+
+  booking       Booking     @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  actor         UserProfile @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
+
+  @@index([completedAt, createdAt])
+  @@map("assignment_request")
   @@schema("public")
 }
 

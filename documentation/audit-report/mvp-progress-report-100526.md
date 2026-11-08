@@ -1,5 +1,9 @@
 # MVP Progress Report
 
+This is the historical October 27 assessment. For current source coverage,
+manual payments and assignment, use the
+[November 8 implementation tracker](./implementation-tracker-2026-11-08.md).
+
 **Originally recorded:** October 5, 2026
 
 **Current-state review:** October 27, 2026

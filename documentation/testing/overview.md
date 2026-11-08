@@ -1,17 +1,20 @@
 # Testing Overview
 
-**Current-state review:** October 27, 2026
+**Current-state review:** November 8, 2026
 
 ## Test levels
 
-ROAMIGO currently has two automated levels:
+ROAMIGO has the following automated levels:
 
 - Unit tests isolate services, guards, controllers, and business rules with
   mocks.
 - HTTP-level tests start a NestJS application and use Supertest while mocking
   external and persistence boundaries.
 
-An isolated real-database integration suite is not implemented yet.
+A dedicated, opt-in local Postgres suite now covers manual-payment approval,
+durable assignment requests and schedule constraints. See the
+[database test runbook](./manual-payments-postgres.md). It has not been run in
+this change. It does not replace the broader integration requirements below.
 
 ```text
 test/
@@ -29,6 +32,10 @@ test/
 ```
 
 ## Current evidence
+
+For the November 8 changes, source/diff review was performed. Tests, formatter,
+lint, type checks, build and database migration execution were not run. The
+results below are historical and do not validate the current revision.
 
 On October 27, 2026, the merged Booking Review source passed:
 
