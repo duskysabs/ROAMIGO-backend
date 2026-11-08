@@ -12,6 +12,7 @@ type TestRequest = {
   user?: {
     id: string;
     email?: string;
+    isDriver?: boolean;
     profile?: {
       role?: UserRole;
     };
@@ -78,6 +79,17 @@ describe('RolesGuard', () => {
     expect(() => guard.canActivate(createContext({}))).toThrow(
       UnauthorizedException,
     );
+  });
+
+  it('denies broad Staff access to a driver-linked Staff account', () => {
+    getAllAndOverride.mockReturnValue([UserRole.ADMIN, UserRole.STAFF]);
+    expect(() => guard.canActivate(createContext({ user: { id: 'driver-user', isDriver: true, profile: { role: UserRole.STAFF } } })))
+      .toThrow(ForbiddenException);
+  });
+
+  it('allows that same driver identity only through Driver-scoped routes', () => {
+    getAllAndOverride.mockReturnValue([UserRole.DRIVER]);
+    expect(guard.canActivate(createContext({ user: { id: 'driver-user', isDriver: true, profile: { role: UserRole.STAFF } } }))).toBe(true);
   });
 
   it('rejects an authenticated user without a profile role', () => {

@@ -11,9 +11,12 @@ Authorization is checked by the service as well as the route guards. No
 accounting-specific permission exists yet. These permissions do not create a
 driver trip API.
 
-The new operator gate applies to payment and allocation queues. Older generic
-STAFF fleet and Booking Review routes still need a role-scope audit when the
-driver identity boundary is implemented.
+The operator gate applies to payment/allocation queues. Authentication now
+loads Driver linkage and RolesGuard denies linked identities access to generic
+STAFF routes as well.
+
+Automatic dispatch, owned Driver execution and initial decline/timeout recovery
+are documented in [the Driver contract](./driver-execution-contract.md).
 
 This version records staff-entered receipt evidence. Customer proof upload,
 storage/signing, deposits, online checkout, PayMongo callbacks, payment expiry,
@@ -93,7 +96,7 @@ reference and audit evidence needed for verification.
 | Receipt recorded | AWAITING_PAYMENT | PENDING | None |
 | Evidence rejected | Unchanged | FAILED | None |
 | Full receipt approved | PAID_AWAITING_ASSIGNMENT | PAID | Durable request committed |
-| Eligible internal pair allocated | CONFIRMED | PAID | ASSIGNED |
+| Eligible internal pair allocated and automatically dispatched | DISPATCHED | PAID | ASSIGNED |
 | Capacity unavailable or allocation failure | PAID_AWAITING_ASSIGNMENT | PAID | Request stays pending |
 
 Payment approval and its audit, booking transition and assignment request are
@@ -141,9 +144,8 @@ change may be rejected by the database. Full recovery and a uniform mapping of
 all adapter constraint errors to application conflicts remain part of #23/#25.
 Do not bypass those guards to resolve an operational issue.
 
-Preparation buffers, complete document/readiness history, turnaround, assignment
-replacement/history, deadlines, generalized transition policy, system actors,
-outbox delivery and driver acknowledgement/start/completion remain separate.
-Current BookingAssignment still has one row per booking, which needs redesign
-before preserving multiple replacement assignments. No production-readiness or
+Driver response deadlines, system actors, assignment history, initial
+decline/timeout recovery and Driver progress/completion are now implemented in
+#57. Preparation buffers, complete document/readiness history, turnaround
+checklist/release, payment expiry, general recovery and outbox delivery remain. No production-readiness or
 real-database verification claim is made by the presence of these endpoints.

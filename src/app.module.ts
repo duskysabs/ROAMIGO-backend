@@ -14,6 +14,7 @@ import { LocationsModule } from './locations/locations.module.js';
 import { RoutingModule } from './routing/routing.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
+import { DriverModule } from './driver/driver.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -40,6 +41,7 @@ import { PaymentsModule } from './payments/payments.module.js';
     RoutingModule,
     StaffModule,
     PaymentsModule,
+    DriverModule,
   ],
   controllers: [AppController],
   providers: [AppService],

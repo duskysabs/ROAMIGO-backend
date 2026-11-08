@@ -16,6 +16,7 @@ describe('AuthService', () => {
 
   const mockUserProfilesService = {
     findByUserId,
+    hasDriverProfile: vi.fn().mockResolvedValue(false),
   };
 
   const mockSupabaseService = {
@@ -31,6 +32,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockUserProfilesService.hasDriverProfile.mockResolvedValue(false);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -264,6 +266,7 @@ describe('AuthService', () => {
       id: 'fake-user-id',
       email: 'test@example.com',
       profile: mockProfile,
+      isDriver: false,
     });
   });
 
@@ -282,5 +285,13 @@ describe('AuthService', () => {
     await expect(
       authService.getUser('invalid-access-token'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('loads Driver linkage from persistence without changing the stored Staff role', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'driver-user', email: 'driver@example.com' } }, error: null });
+    findByUserId.mockResolvedValue({ userId: 'driver-user', role: 'STAFF', accountStatus: 'ACTIVE' });
+    mockUserProfilesService.hasDriverProfile.mockResolvedValue(true);
+    await expect(authService.getUser('verified-token')).resolves.toMatchObject({ isDriver: true, profile: { role: 'STAFF' } });
+    expect(mockUserProfilesService.hasDriverProfile).toHaveBeenCalledWith('driver-user');
   });
 });

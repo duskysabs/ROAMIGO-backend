@@ -109,6 +109,7 @@ enum BookingStatus {
   VALIDATED
   AWAITING_PAYMENT
   PAID_AWAITING_ASSIGNMENT
+  RECOVERY_REQUIRED
   BOOKING_REVIEW
   CONFIRMED
   DISPATCHED
@@ -285,6 +286,7 @@ model UserProfile {
   bookingTransitions BookingTransition[]
   paymentAudits PaymentAudit[]
   assignmentRequests AssignmentRequest[]
+  driverEvents DriverEvent[]
   authUser      AuthUser              @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("user_profile")
@@ -331,6 +333,7 @@ model Driver {
   vehicle       Vehicle?     @relation("AssignedDriverVehicle")
   assignments   BookingAssignment[]
   addedStops    BookingStop[] @relation("AddedStopDriver")
+  resourceHolds ResourceHold[]
 
   @@map("driver")
   @@schema("public")
@@ -370,6 +373,7 @@ model Vehicle {
   vehicleType      VehicleType   @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
   assignments      BookingAssignment[]
   maintenanceRecords MaintenanceRecord[]
+  resourceHolds ResourceHold[]
 
   @@map("vehicle")
   @@schema("public")
@@ -484,14 +488,15 @@ model BookingQuote {
 model BookingTransition {
   id            String        @id @default(uuid()) @db.Uuid @map("booking_transition_id")
   bookingId     String        @db.Uuid @map("booking_id")
-  actorUserId   String        @db.Uuid @map("actor_user_id")
+  actorUserId   String?       @db.Uuid @map("actor_user_id")
+  actorSource   String        @default("USER") @db.VarChar(10) @map("actor_source")
   previousState BookingStatus @map("previous_state")
   nextState     BookingStatus @map("next_state")
   reason        String?       @db.Text
   occurredAt    DateTime      @default(now()) @db.Timestamptz(3) @map("occurred_at")
 
   booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  actor         UserProfile   @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
+  actor         UserProfile?  @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
 
   @@index([bookingId, occurredAt])
   @@map("booking_transition")
@@ -526,17 +531,24 @@ model BookingAssignment {
   id               String           @id @default(uuid()) @db.Uuid @map("booking_assignment_id")
   vehicleId        String           @db.Uuid @map("vehicle_id")
   driverId         String           @db.Uuid @map("driver_id")
-  bookingId        String           @unique @db.Uuid @map("booking_id")
+  bookingId        String           @db.Uuid @map("booking_id")
   assignmentStatus AssignmentStatus @map("assignment_status")
   assignedAt       DateTime         @default(now()) @db.Timestamptz(3) @map("assigned_at")
   reservedFrom     DateTime         @db.Timestamptz(3) @map("reserved_from")
   reservedUntil    DateTime         @db.Timestamptz(3) @map("reserved_until")
+  dispatchedAt     DateTime?        @db.Timestamptz(3) @map("dispatched_at")
+  responseDeadline DateTime?        @db.Timestamptz(3) @map("response_deadline")
+  respondedAt      DateTime?        @db.Timestamptz(3) @map("responded_at")
+  tripState        String           @default("DISPATCHED") @db.VarChar(20) @map("trip_state")
 
   vehicle          Vehicle          @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
   driver           Driver           @relation(fields: [driverId], references: [id], onDelete: Restrict)
   booking          Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   travelSlip       TravelSlip?
+  events           DriverEvent[]
+  resourceHold     ResourceHold?
 
+  @@index([bookingId, assignedAt])
   @@map("booking_assignment")
   @@schema("public")
 }
@@ -654,6 +666,7 @@ model AssignmentRequest {
   completedAt   DateTime?   @db.Timestamptz(3) @map("completed_at")
   attempts      Int         @default(0)
   lastFailure   String?     @db.VarChar(100) @map("last_failure")
+  isRecovery    Boolean     @default(false) @map("is_recovery")
   createdAt     DateTime    @default(now()) @db.Timestamptz(3) @map("created_at")
 
   booking       Booking     @relation(fields: [bookingId], references: [id], onDelete: Restrict)
@@ -661,6 +674,41 @@ model AssignmentRequest {
 
   @@index([completedAt, createdAt])
   @@map("assignment_request")
+  @@schema("public")
+}
+
+model DriverEvent {
+  id            String       @id @default(uuid()) @db.Uuid @map("driver_event_id")
+  assignmentId  String       @db.Uuid @map("assignment_id")
+  actorUserId   String?      @db.Uuid @map("actor_user_id")
+  actorSource   String       @default("USER") @db.VarChar(10) @map("actor_source")
+  action        String       @db.VarChar(20)
+  reason        String?      @db.VarChar(500)
+  occurredAt    DateTime     @default(now()) @db.Timestamptz(3) @map("occurred_at")
+
+  assignment    BookingAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  actor         UserProfile? @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
+
+  @@unique([assignmentId, action])
+  @@map("driver_event")
+  @@schema("public")
+}
+
+model ResourceHold {
+  id            String       @id @default(uuid()) @db.Uuid @map("resource_hold_id")
+  assignmentId  String       @unique @db.Uuid @map("assignment_id")
+  vehicleId     String       @db.Uuid @map("vehicle_id")
+  driverId      String       @db.Uuid @map("driver_id")
+  phase         String       @db.VarChar(20)
+  releasedAt    DateTime?    @db.Timestamptz(3) @map("released_at")
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3) @map("created_at")
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3) @map("updated_at")
+
+  assignment    BookingAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  vehicle       Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver        Driver       @relation(fields: [driverId], references: [id], onDelete: Restrict)
+
+  @@map("resource_hold")
   @@schema("public")
 }
 
@@ -785,6 +833,7 @@ model TravelSlip {
   actualTripEndAt     DateTime?        @db.Timestamptz(3) @map("actual_trip_end_at")
   travelSlipStatus    TravelSlipStatus @map("travel_slip_status")
   remarks             String?          @db.Text
+  completionSnapshot  Json?            @db.JsonB @map("completion_snapshot")
   updatedAt           DateTime         @updatedAt @db.Timestamptz(3) @map("updated_at")
   createdAt           DateTime         @default(now()) @db.Timestamptz(3) @map("created_at")
   completedAt         DateTime?        @db.Timestamptz(3) @map("completed_at")

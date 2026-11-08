@@ -23,6 +23,8 @@ This directory contains the technical documentation for the ROAMIGO backend.
 
 ### Booking API
 
+- [Automatic dispatch and Driver execution](./api/driver-execution-contract.md): configurable response windows, owned trips, recovery, completion and blocked turnaround.
+
 - [Manual payments and initial assignment](./api/manual-payments-and-assignment.md): full-payment verification, operator access and durable allocation requests.
 - [Manual payment database verification](./testing/manual-payments-postgres.md): migration preflight and isolated database checks.
 

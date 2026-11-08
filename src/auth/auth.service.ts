@@ -138,6 +138,7 @@ export class AuthService {
     return {
       ...user,
       profile,
+      isDriver: await this.userProfilesService.hasDriverProfile(user.id),
     };
   }
 }
