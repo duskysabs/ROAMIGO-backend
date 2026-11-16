@@ -1,11 +1,15 @@
 # Complete API endpoint coverage
 
-Source revision: 98fee6570219a9788286a318baadd32895453fbe (dev). Inventory is derived from controller classes, method decorators, guards and HTTP status overrides. All controllers are mounted by AppModule or its imported modules.
+Source baseline: 98fee6570219a9788286a318baadd32895453fbe (dev), plus this branch's Notification Inbox. Inventory is derived from controller classes, method decorators, guards and HTTP status overrides. All controllers are mounted by AppModule or its imported modules.
 
-70 unique method/path combinations, 159 requests, 61 per-endpoint missing-auth checks. This is authored coverage, not executed evidence. Missing fixture/scenario/provider settings produce explicit skips. Unexpected HTTP errors fail; they are not accepted as positive results.
+74 unique method/path combinations, 167 requests, 65 per-endpoint missing-auth checks. This is authored coverage, not executed evidence. Missing fixture/scenario/provider settings produce explicit skips. Unexpected HTTP errors fail; they are not accepted as positive results.
 
 | Method | Endpoint | Primary request folder | Access | Source |
 | --- | --- | --- | --- | --- |
+| GET | /notifications | 16 Notification inbox | Authenticated | [controller](../../src/notifications/notifications.controller.ts) |
+| GET | /notifications/unread-count | 16 Notification inbox | Authenticated | [controller](../../src/notifications/notifications.controller.ts) |
+| PATCH | /notifications/:notificationId/read | 16 Notification inbox | Authenticated | [controller](../../src/notifications/notifications.controller.ts) |
+| PATCH | /notifications/read-all | 16 Notification inbox | Authenticated | [controller](../../src/notifications/notifications.controller.ts) |
 | POST | /admin/fleet/drivers/:driverId/deactivate | 13 Scratch cleanup only | ADMIN | [src/fleet/fleet-admin.controller.ts](https://github.com/duskysabs/ROAMIGO-backend/blob/98fee6570219a9788286a318baadd32895453fbe/src/fleet/fleet-admin.controller.ts#L46) |
 | PATCH | /admin/fleet/drivers/:driverId | 04 Scratch fleet and readiness | ADMIN | [src/fleet/fleet-admin.controller.ts](https://github.com/duskysabs/ROAMIGO-backend/blob/98fee6570219a9788286a318baadd32895453fbe/src/fleet/fleet-admin.controller.ts#L38) |
 | POST | /admin/fleet/drivers | 04 Scratch fleet and readiness | ADMIN | [src/fleet/fleet-admin.controller.ts](https://github.com/duskysabs/ROAMIGO-backend/blob/98fee6570219a9788286a318baadd32895453fbe/src/fleet/fleet-admin.controller.ts#L33) |
@@ -81,4 +85,4 @@ Source revision: 98fee6570219a9788286a318baadd32895453fbe (dev). Inventory is de
 
 Role logins, customer onboarding, signup for a scratch employee, reversible readiness changes, submission replay, review alternatives, missing authentication for every protected endpoint, ownership denials and invalid DTO/state inputs are separate requests. Terminal alternatives deliberately require distinct records/scenarios.
 
-Not implemented endpoints (refunds, general turnaround release, partner APIs and general notification reads) are not invented. The timeout endpoint is exercised, but proving expiration requires a genuinely overdue unanswered assignment. No artificial sleep or deadline rewrite is included.
+Not implemented endpoints (refunds, general turnaround release, partner APIs, notification delivery, and notification preferences) are not invented. The timeout endpoint is exercised, but proving expiration requires a genuinely overdue unanswered assignment. No artificial sleep or deadline rewrite is included.

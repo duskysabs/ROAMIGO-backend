@@ -29,6 +29,7 @@ This directory contains the technical documentation for the ROAMIGO backend.
 - [Manual payment database verification](./testing/manual-payments-postgres.md): migration preflight and isolated database checks.
 
 - [Booking MVP contract](./api/booking-mvp-contract.md) — Customer catalog, quote preview, booking, and state semantics.
+- [Notification Inbox contract](./api/notification-inbox-contract.md) — Authenticated list, unread count, and mark-read actions.
 - [Fleet management contract](./api/fleet-management-contract.md) — Vehicle and Driver master data, pairing, readiness, and availability.
 - [Staff Administration contract](./api/staff-administration-contract.md) — Administrator-managed Staff onboarding, profile maintenance, and employment lifecycle.
 

@@ -15,6 +15,7 @@ import { RoutingModule } from './routing/routing.module.js';
 import { StaffModule } from './staff/staff.module.js';
 import { PaymentsModule } from './payments/payments.module.js';
 import { DriverModule } from './driver/driver.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 
 // export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -42,6 +43,7 @@ import { DriverModule } from './driver/driver.module.js';
     StaffModule,
     PaymentsModule,
     DriverModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
