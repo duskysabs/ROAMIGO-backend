@@ -16,6 +16,7 @@ describe('Manual payment recording and review', () => {
         findUnique: vi.fn().mockResolvedValue(current), findUniqueOrThrow: vi.fn().mockResolvedValue(current),
         create: vi.fn().mockResolvedValue(current), update: vi.fn().mockResolvedValue({ ...current, paymentStatus: PaymentStatus.PAID }), findMany: vi.fn(),
       },
+      paymongoCheckout: { findUnique: vi.fn().mockResolvedValue(null) },
       bookingTransition: { create: vi.fn() }, assignmentRequest: { create: vi.fn() },
     };
     const prisma = { ...tx, $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)) };

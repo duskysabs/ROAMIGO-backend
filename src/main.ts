@@ -11,7 +11,7 @@ async function bootstrap() {
   //   instrument: ObserveInstrument,
   // }); UNCOMMENT WHEN WE ADD BACK OBSERVE MONITORING TOOL
 
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create(AppModule, { rawBody: true })
   
   app.useGlobalPipes(
     new ValidationPipe({
