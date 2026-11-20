@@ -8,6 +8,7 @@ import { DriverController, DriverResponseController, TripCompletionController } 
 import { DriverService } from '../../src/driver/driver.service.js';
 import { PaymentsController } from '../../src/payments/payments.controller.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
+import { PaymongoService } from '../../src/payments/paymongo.service.js';
 
 describe('Driver HTTP access and command validation', () => {
   let app: INestApplication;
@@ -19,7 +20,7 @@ describe('Driver HTTP access and command validation', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [DriverController, DriverResponseController, TripCompletionController, PaymentsController],
-      providers: [ { provide: AuthService, useValue: { getUser } }, { provide: DriverService, useValue: drivers }, { provide: PaymentsService, useValue: payments } ],
+      providers: [ { provide: AuthService, useValue: { getUser } }, { provide: DriverService, useValue: drivers }, { provide: PaymentsService, useValue: payments }, { provide: PaymongoService, useValue: {} } ],
     }).compile();
     app = module.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));

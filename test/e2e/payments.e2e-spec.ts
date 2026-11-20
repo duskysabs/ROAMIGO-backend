@@ -6,6 +6,7 @@ import { AuthService } from '../../src/auth/auth.service.js';
 import { UserRole } from '../../src/generated/prisma/enums.js';
 import { PaymentsController } from '../../src/payments/payments.controller.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
+import { PaymongoService } from '../../src/payments/paymongo.service.js';
 import { AssignmentsController } from '../../src/assignments/assignments.controller.js';
 import { AssignmentsService } from '../../src/assignments/assignments.service.js';
 
@@ -14,6 +15,7 @@ describe('Manual payment HTTP boundaries', () => {
   const id = '00000000-0000-4000-8000-000000000001';
   const getUser = vi.fn();
   const payments = { record: vi.fn(), review: vi.fn(), listMine: vi.fn(), pending: vi.fn() };
+  const paymongo = { createCheckout: vi.fn(), acceptWebhook: vi.fn() };
   const assignments = { retry: vi.fn(), pending: vi.fn() };
 
   beforeAll(async () => {
@@ -21,6 +23,7 @@ describe('Manual payment HTTP boundaries', () => {
       controllers: [PaymentsController, AssignmentsController],
       providers: [
         { provide: PaymentsService, useValue: payments },
+        { provide: PaymongoService, useValue: paymongo },
         { provide: AssignmentsService, useValue: assignments },
         { provide: AuthService, useValue: { getUser } },
       ],
@@ -67,6 +70,19 @@ describe('Manual payment HTTP boundaries', () => {
     payments.listMine.mockResolvedValue([]);
     await request(app.getHttpServer()).get(`/bookings/${id}/payments`).set('Authorization', 'Bearer token').expect(200);
     expect(payments.listMine).toHaveBeenCalledWith('customer', id, expect.objectContaining({ limit: 20 }));
+  });
+
+  it('allows only customers to start their own test checkout', async () => {
+    getUser.mockResolvedValue({ id, profile: { role: UserRole.STAFF } });
+    await request(app.getHttpServer()).post(`/bookings/${id}/payments/paymongo/checkout`).set('Authorization', 'Bearer token').expect(403);
+    getUser.mockResolvedValue({ id, profile: { role: UserRole.CUSTOMER } });
+    paymongo.createCheckout.mockResolvedValue({ checkoutUrl: 'https://example.test/checkout', sessionId: 'cs_test' });
+    await request(app.getHttpServer()).post(`/bookings/${id}/payments/paymongo/checkout`).set('Authorization', 'Bearer token').expect(201);
+    expect(paymongo.createCheckout).toHaveBeenCalledWith(id, id);
+    paymongo.createCheckout.mockClear();
+    await request(app.getHttpServer()).post(`/bookings/${id}/payments/paymongo/checkout`).set('Authorization', 'Bearer token')
+      .send({ amount: '1.00' }).expect(400);
+    expect(paymongo.createCheckout).not.toHaveBeenCalled();
   });
 
   it('denies unauthenticated assignment retries', async () => {

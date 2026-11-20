@@ -37,6 +37,9 @@ export class PaymentsService {
         if (booking.bookingStatus !== BookingStatus.AWAITING_PAYMENT) {
           throw new ConflictException('Booking is not awaiting payment');
         }
+        if (await tx.paymongoCheckout.findUnique({ where: { bookingId }, select: { bookingId: true } })) {
+          throw new ConflictException('A PayMongo checkout already exists for this booking');
+        }
         if (!amount.equals(booking.finalQuotedPrice)) {
           throw new BadRequestException('The exact full quoted amount is required in PHP');
         }
@@ -101,6 +104,9 @@ export class PaymentsService {
       if (current.paymentStatus !== PaymentStatus.PENDING) throw new ConflictException('Payment review was already resolved');
       if (approve) {
         if (current.booking.bookingStatus !== BookingStatus.AWAITING_PAYMENT) throw new ConflictException('Booking is not awaiting payment');
+        if (await tx.paymongoCheckout.findUnique({ where: { bookingId: current.bookingId }, select: { bookingId: true } })) {
+          throw new ConflictException('A PayMongo checkout already exists for this booking');
+        }
         if (current.currency !== 'PHP' || !current.amount.greaterThan(0) || !current.amount.equals(current.booking.finalQuotedPrice)) {
           throw new ConflictException('Only exact full PHP payment can be approved');
         }

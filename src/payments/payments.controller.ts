@@ -1,14 +1,30 @@
 import { CursorPageQueryDto } from '../common/dto/cursor-page-query.dto.js';
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import type { AuthenticatedRequest } from '../auth/guards/supabase-auth.guard.js';
 import { UserRole } from '../generated/prisma/enums.js';
 import { RecordManualPaymentDto, ReviewManualPaymentDto } from './dto/manual-payment.dto.js';
 import { PaymentsService } from './payments.service.js';
+import { PaymongoService } from './paymongo.service.js';
 
 @Controller()
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(private readonly payments: PaymentsService, private readonly paymongo: PaymongoService) {}
+
+  @Post('bookings/:bookingId/payments/paymongo/checkout')
+  @Roles(UserRole.CUSTOMER)
+  checkout(@Req() request: AuthenticatedRequest, @Param('bookingId', ParseUUIDPipe) bookingId: string, @Body() body?: Record<string, unknown>) {
+    if (body && Object.keys(body).length) throw new BadRequestException('Checkout does not accept client payment details');
+    return this.paymongo.createCheckout(request.user!.id, bookingId);
+  }
+
+  @Post('webhooks/paymongo/test')
+  @HttpCode(200)
+  webhook(@Req() request: Request & { rawBody?: Buffer }) {
+    const signature = request.headers['paymongo-signature'];
+    return this.paymongo.acceptWebhook(typeof signature === 'string' ? signature : undefined, request.rawBody);
+  }
 
   @Post('staff/bookings/:bookingId/payments/manual')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
