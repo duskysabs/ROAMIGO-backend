@@ -1,7 +1,7 @@
 import { CursorPageQueryDto } from '../common/dto/cursor-page-query.dto.js';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
-import { BookingStatus, PaymentChannel, PaymentStatus } from '../generated/prisma/enums.js';
+import { BookingSalesChannel, BookingStatus, PaymentChannel, PaymentStatus } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AssignmentsService } from '../assignments/assignments.service.js';
 import { RecordManualPaymentDto, ReviewManualPaymentDto } from './dto/manual-payment.dto.js';
@@ -26,14 +26,15 @@ export class PaymentsService {
       return await this.prisma.$transaction(async (tx) => {
         const actor = await requireStaffOperator(tx, actorUserId);
         await this.lockBooking(tx, bookingId);
+        const booking = await tx.booking.findUnique({ where: { id: bookingId } });
+        if (!booking) throw new NotFoundException('Booking not found');
+        this.requireManualChannel(booking.salesChannel);
         const existing = await tx.payment.findUnique({
           where: { provider_providerReference: { provider, providerReference: reference } },
           select: paymentView,
         });
         if (existing) return this.matchRecord(existing, bookingId, amount);
 
-        const booking = await tx.booking.findUnique({ where: { id: bookingId } });
-        if (!booking) throw new NotFoundException('Booking not found');
         if (booking.bookingStatus !== BookingStatus.AWAITING_PAYMENT) {
           throw new ConflictException('Booking is not awaiting payment');
         }
@@ -96,6 +97,7 @@ export class PaymentsService {
       await this.lockBooking(tx, initial.bookingId);
       const current = await tx.payment.findUnique({ where: { id: paymentId }, include: { booking: true } });
       if (!current || current.paymentChannel !== PaymentChannel.MANUAL) throw new NotFoundException('Manual payment not found');
+      if (approve) this.requireManualChannel(current.booking.salesChannel);
       const next = approve ? PaymentStatus.PAID : PaymentStatus.FAILED;
       if (current.paymentStatus === next) return tx.payment.findUniqueOrThrow({ where: { id: paymentId }, select: paymentView });
       if (current.paymentStatus !== PaymentStatus.PENDING) throw new ConflictException('Payment review was already resolved');
@@ -132,6 +134,12 @@ export class PaymentsService {
 
   private async lockBooking(tx: Prisma.TransactionClient, bookingId: string) {
     await tx.$queryRaw`SELECT booking_id FROM public.booking WHERE booking_id = ${bookingId}::uuid FOR UPDATE`;
+  }
+
+  private requireManualChannel(salesChannel: BookingSalesChannel) {
+    if (salesChannel !== BookingSalesChannel.FACE_TO_FACE) {
+      throw new ConflictException('Manual payment requires a verified face-to-face booking channel');
+    }
   }
 
   private matchRecord<T extends { bookingId: string; amount: Prisma.Decimal }>(existing: T, bookingId: string, amount: Prisma.Decimal) {

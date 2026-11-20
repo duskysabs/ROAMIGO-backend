@@ -8,6 +8,7 @@ import { eligiblePairsWhere } from '../fleet/allocation-eligibility.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   AccountStatus,
+  BookingSalesChannel,
   BookingStatus,
   BookingType,
   NotificationType,
@@ -21,6 +22,13 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ListMyBookingsDto } from './dto/list-my-bookings.dto.js';
 import { RoutingService } from '../routing/routing.service.js';
 import { SubmitBookingQuoteDto } from './dto/submit-booking-quote.dto.js';
+import { FaceToFaceQuoteDto } from './dto/face-to-face-booking.dto.js';
+import { requireStaffOperator } from '../common/staff-operator.js';
+
+type BookingOrigin =
+  | { salesChannel: 'ONLINE'; operatorUserId?: never; reason?: never }
+  | { salesChannel: 'FACE_TO_FACE'; operatorUserId: string; reason: string };
+const onlineOrigin: BookingOrigin = { salesChannel: BookingSalesChannel.ONLINE };
 
 @Injectable()
 export class BookingsService {
@@ -62,6 +70,7 @@ export class BookingsService {
     return this.prisma.booking.create({
       data: {
         customerUserId,
+        salesChannel: BookingSalesChannel.ONLINE,
         vehicleTypeId: dto.vehicleTypeId,
         bookingType: dto.bookingType,
         tourPackageId: dto.tourPackageId,
@@ -143,6 +152,26 @@ export class BookingsService {
   }
 
   async issueQuote(customerUserId: string, dto: CreateBookingDto) {
+    return this.issueScopedQuote(customerUserId, dto, onlineOrigin);
+  }
+
+  async issueFaceToFaceQuote(operatorUserId: string, dto: FaceToFaceQuoteDto) {
+    const { customerUserId, reason, ...request } = dto;
+    await this.prisma.$transaction((tx) => this.requireFaceToFaceOperator(tx, operatorUserId, customerUserId));
+    return this.issueScopedQuote(customerUserId, request, {
+      salesChannel: BookingSalesChannel.FACE_TO_FACE, operatorUserId, reason,
+    });
+  }
+
+  private async requireFaceToFaceOperator(tx: Prisma.TransactionClient, operatorUserId: string, customerUserId: string) {
+    await requireStaffOperator(tx, operatorUserId);
+    const customer = await tx.userProfile.findUnique({ where: { userId: customerUserId } });
+    if (!customer || customer.role !== UserRole.CUSTOMER || customer.accountStatus !== AccountStatus.ACTIVE) {
+      throw new BadRequestException('An active Customer profile is required');
+    }
+  }
+
+  private async issueScopedQuote(customerUserId: string, dto: CreateBookingDto, origin: BookingOrigin) {
     this.validateCreateRequest(dto);
     const selection = await this.validateBookingSelections(dto);
     const routePreview =
@@ -173,9 +202,12 @@ export class BookingsService {
     const requestSnapshot = JSON.parse(
       JSON.stringify({ ...dto, stops: routeStops }),
     ) as Prisma.InputJsonObject;
-    const stored = await this.prisma.bookingQuote.create({
+    const createQuote = (client: Pick<Prisma.TransactionClient, 'bookingQuote'>) => client.bookingQuote.create({
       data: {
         customerUserId,
+        salesChannel: origin.salesChannel,
+        operatorUserId: origin.operatorUserId,
+        operatorReason: origin.reason,
         bookingType: dto.bookingType,
         vehicleTypeId: dto.vehicleTypeId,
         tourPackageId: dto.tourPackageId,
@@ -190,6 +222,12 @@ export class BookingsService {
         expiresAt,
       },
     });
+    const stored = origin.operatorUserId
+      ? await this.prisma.$transaction(async (tx) => {
+          await this.requireFaceToFaceOperator(tx, origin.operatorUserId!, customerUserId);
+          return createQuote(tx);
+        }, { timeout: 15_000 })
+      : await createQuote(this.prisma);
     return {
       quoteId: stored.id,
       currency: 'PHP',
@@ -228,22 +266,42 @@ export class BookingsService {
   }
 
   async submitQuote(customerUserId: string, command: SubmitBookingQuoteDto) {
+    return this.submitScopedQuote(customerUserId, command, onlineOrigin);
+  }
+
+  async submitFaceToFaceQuote(operatorUserId: string, command: SubmitBookingQuoteDto) {
+    const quote = await this.prisma.$transaction(async (tx) => {
+      await requireStaffOperator(tx, operatorUserId);
+      return tx.bookingQuote.findFirst({ where: {
+        id: command.quoteId, salesChannel: BookingSalesChannel.FACE_TO_FACE, operatorUserId,
+      } });
+    });
+    if (!quote) throw new NotFoundException('Face-to-face quote not found');
+    if (!quote.operatorReason) throw new ConflictException('Face-to-face quote provenance is incomplete');
+    return this.submitScopedQuote(quote.customerUserId, command, {
+      salesChannel: BookingSalesChannel.FACE_TO_FACE, operatorUserId, reason: quote.operatorReason,
+    });
+  }
+
+  private async submitScopedQuote(customerUserId: string, command: SubmitBookingQuoteDto, origin: BookingOrigin) {
     if (!command.idempotencyKey?.trim()) {
       throw new BadRequestException('An idempotency key is required');
     }
-    const existing = await this.findSubmission(this.prisma, customerUserId, command);
+    const existing = await this.findSubmission(this.prisma, customerUserId, command, origin);
     if (existing) return existing;
     const quote = await this.prisma.bookingQuote.findFirst({
       where: {
         id: command.quoteId,
         customerUserId,
+        salesChannel: origin.salesChannel,
+        operatorUserId: origin.operatorUserId ?? null,
         consumedAt: null,
         expiresAt: { gt: new Date() },
       },
       include: { pricingConfiguration: true },
     });
     if (!quote) {
-      const completed = await this.findSubmission(this.prisma, customerUserId, command);
+      const completed = await this.findSubmission(this.prisma, customerUserId, command, origin);
       if (completed) return completed;
       throw new BadRequestException(
         'Quote is expired, consumed, or unavailable',
@@ -267,7 +325,8 @@ export class BookingsService {
     const stops = snapshot.stops ?? [];
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const retry = await this.findSubmission(tx, customerUserId, command);
+        if (origin.operatorUserId) await this.requireFaceToFaceOperator(tx, origin.operatorUserId, customerUserId);
+        const retry = await this.findSubmission(tx, customerUserId, command, origin);
         if (retry) return retry;
         // Claim before writing the booking so only one request can consume a quote.
         // A failed transaction rolls this claim back with the booking write.
@@ -275,13 +334,15 @@ export class BookingsService {
           where: {
             id: quote.id,
             customerUserId,
+            salesChannel: origin.salesChannel,
+            operatorUserId: origin.operatorUserId ?? null,
             consumedAt: null,
             expiresAt: { gt: new Date() },
           },
           data: { consumedAt: new Date() },
         });
         if (claimed.count !== 1) {
-          const completed = await this.findSubmission(tx, customerUserId, command);
+          const completed = await this.findSubmission(tx, customerUserId, command, origin);
           if (completed) return completed;
           throw new BadRequestException(
             'Quote is expired, consumed, or unavailable',
@@ -290,6 +351,7 @@ export class BookingsService {
         const booking = await tx.booking.create({
           data: {
             customerUserId,
+            salesChannel: origin.salesChannel,
             idempotencyKey: command.idempotencyKey,
             vehicleTypeId: snapshot.vehicleTypeId,
             bookingType: snapshot.bookingType,
@@ -337,10 +399,10 @@ export class BookingsService {
         await tx.bookingTransition.create({
           data: {
             bookingId: booking.id,
-            actorUserId: customerUserId,
+            actorUserId: origin.operatorUserId ?? customerUserId,
             previousState: BookingStatus.DRAFT,
             nextState: initialStatus,
-            reason: hasInternalVehicle
+            reason: origin.operatorUserId ? `Face-to-face booking: ${origin.reason}` : hasInternalVehicle
               ? 'Customer accepted server-issued quote'
               : 'Customer requested staff review because no internal vehicle was available',
           },
@@ -366,13 +428,14 @@ export class BookingsService {
           }
         }
         return booking;
-      });
+      }, origin.operatorUserId ? { timeout: 15_000 } : undefined);
     } catch (error) {
       // A competing request may commit the same customer key after our lookup.
       if (typeof error === 'object' && error !== null &&
           'code' in error && error.code === 'P2002') {
-        const completed = await this.findSubmission(this.prisma, customerUserId, command);
+        const completed = await this.findSubmission(this.prisma, customerUserId, command, origin);
         if (completed) return completed;
+        throw new ConflictException('Idempotency key or quote is already used by another booking command');
       }
       throw error;
     }
@@ -382,13 +445,14 @@ export class BookingsService {
     client: Pick<Prisma.TransactionClient, 'booking'>,
     customerUserId: string,
     command: SubmitBookingQuoteDto,
+    origin: BookingOrigin,
   ) {
     const existing = await client.booking.findFirst({
-      where: { customerUserId, idempotencyKey: command.idempotencyKey },
-      include: { quote: { select: { id: true } } },
+      where: { customerUserId, idempotencyKey: command.idempotencyKey, salesChannel: origin.salesChannel },
+      include: { quote: { select: { id: true, operatorUserId: true } } },
     });
     if (!existing) return null;
-    if (existing.quote?.id !== command.quoteId) {
+    if (existing.quote?.id !== command.quoteId || (existing.quote.operatorUserId ?? undefined) !== origin.operatorUserId) {
       throw new ConflictException('Idempotency key is already bound to another quote');
     }
     const { quote: _quote, ...booking } = existing;

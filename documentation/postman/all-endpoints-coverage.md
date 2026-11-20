@@ -82,3 +82,15 @@ Source revision: 98fee6570219a9788286a318baadd32895453fbe (dev). Inventory is de
 Role logins, customer onboarding, signup for a scratch employee, reversible readiness changes, submission replay, review alternatives, missing authentication for every protected endpoint, ownership denials and invalid DTO/state inputs are separate requests. Terminal alternatives deliberately require distinct records/scenarios.
 
 Not implemented endpoints (refunds, general turnaround release, partner APIs and general notification reads) are not invented. The timeout endpoint is exercised, but proving expiration requires a genuinely overdue unanswered assignment. No artificial sleep or deadline rewrite is included.
+
+
+### Booking-channel extension (#63)
+
+| Endpoint | Collection coverage |
+| --- | --- |
+| POST /staff/bookings/face-to-face/quote | 08b operator quote and folder 14 missing-auth case |
+| POST /staff/bookings/face-to-face | 08b operator submit/replay and folder 14 missing-auth case |
+
+Folder 08b includes ONLINE manual-receipt denial. Folder 09 uses FACE_TO_FACE
+fixture variables. The authored totals are now 72 endpoints, 164 templates and
+63 missing-auth checks. These counts do not claim live execution.

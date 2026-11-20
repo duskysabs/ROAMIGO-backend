@@ -3629,33 +3629,22 @@
       ]
     },
     {
-      "name": "09 Manual payment and allocation",
+      "name": "08b Face-to-face booking channel",
+      "description": "Run after catalog and customer identity setup. Folder 08 remains the ONLINE customer path. Do not rerun the quote step when testing submission replay.",
       "item": [
         {
-          "id": "3af019f1-08b1-570d-abcd-006e3927e238",
-          "name": "POST /staff/bookings/:bookingId/payments/manual",
+          "name": "POST operator face-to-face quote",
           "event": [
             {
               "listen": "prerequest",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "(function(){",
-                  " function skip(message){console.info('SKIPPED '+pm.info.requestName+': '+message);if(!pm.execution||typeof pm.execution.skipRequest!=='function')throw new Error('Use a current Postman Desktop version with pm.execution.skipRequest support');pm.execution.skipRequest();}",
-                  " if(!pm.environment.get('baseUrl'))return skip('Select the ROAMIGO complete API environment');",
-                  " const now=Date.now();function initial(k,v){if(!pm.environment.get(k))pm.environment.set(k,v);}initial('runTag','QA-'+now.toString(36));initial('startDatetime',new Date(now-60000).toISOString());initial('endDatetime',new Date(now+7200000).toISOString());initial('licenseExpiry',new Date(now+5*365*86400000).toISOString().slice(0,10));initial('pricingEffectiveFrom',new Date(now).toISOString());initial('pricingEffectiveUntil',new Date(now+86400000).toISOString());pm.variables.set('qaPlate','QA-'+now.toString(36)+'-'+Math.random().toString(36).slice(2,6));pm.variables.set('qaLicense','QA-'+pm.variables.replaceIn('{{$guid}}'));pm.variables.set('vehicleYear',new Date(now).getUTCFullYear());pm.variables.set('requestNonce',pm.variables.replaceIn('{{$guid}}'));",
-                  " ",
-                  " if(pm.environment.get('runWrites')!=='true')return skip('runWrites must be true for isolated test data');",
-                  " ",
-                  " if(![\"main\"].includes(pm.environment.get('scenario')||'main'))return skip('Select scenario: '+\"main\");",
-                  " const required=[\"bookingId\",\"paymentAmount\",\"staffToken\"];const missing=required.filter(k=>!String(pm.environment.get(k)||pm.variables.get(k)||'').trim());if(missing.length)return skip('Missing variables: '+missing.join(', '));",
-                  " ",
-                  " ",
-                  " ",
-                  " for(const key of [\"paymentId\"])pm.environment.unset(key);",
-                  " for(const key of [])pm.variables.set('encoded_'+key,encodeURIComponent(pm.environment.get(key)||''));",
-                  " const template={\"method\":\"CASH\",\"reference\":\"QA-{{runTag}}\",\"amount\":\"{{paymentAmount}}\",\"reason\":\"Synthetic isolated API receipt\"};function resolve(value){if(typeof value==='string')return value.replace(/{{([^}]+)}}/g,(_,key)=>{const v=pm.variables.get(key)??pm.environment.get(key);if(v===undefined||v===null)throw new Error('Missing body variable: '+key);return String(v);});if(Array.isArray(value))return value.map(resolve);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,resolve(v)]));return value;}const body=resolve(template);for(const key of []){body[key]=Number(body[key]);if(!Number.isFinite(body[key]))throw new Error('Invalid numeric body variable: '+key);}pm.request.body.update(JSON.stringify(body));",
-                  " })();"
+                  "if (pm.environment.get('runWrites') !== 'true') { pm.execution.skipRequest(); } else {",
+                  "const missing=[\"baseUrl\", \"staffToken\", \"customerUserId\", \"vehicleTypeId\", \"tourPackageId\", \"startDatetime\", \"endDatetime\"].filter(k=>!String(pm.environment.get(k)||'').trim());",
+                  "if(missing.length){console.info('SKIPPED '+pm.info.requestName+': '+missing.join(', '));pm.execution.skipRequest();}",
+                  "}",
+                  "if(pm.environment.get('runWrites')==='true')for(const key of ['faceToFaceQuoteId','faceToFaceSubmitKey','faceToFaceBookingId','faceToFacePaymentAmount'])pm.environment.unset(key);"
                 ]
               }
             },
@@ -3664,7 +3653,128 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "(function(){pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));if(pm.response.code!==201)return;pm.test('JSON response',()=>pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));const j=pm.response.json();const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;pm.test('Record has an ID',()=>pm.expect(j.id).to.match(uuidPattern));pm.test(\"paymentStatus = PENDING\",()=>pm.expect(j.paymentStatus).to.eql(\"PENDING\"));if(j.id!==undefined && j.id!==null) pm.environment.set(\"paymentId\",String(j.id));pm.test('Exact server quote amount',()=>pm.expect(Number(j.amount)).to.eql(Number(pm.environment.get('paymentAmount'))));})();"
+                  "pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));",
+                  "if(pm.response.code===201){",
+                  "const j=pm.response.json();pm.test('Quote ID and amount',()=>{pm.expect(j.quoteId).to.be.a('string');pm.expect(Number(j.finalQuotedPrice)).to.be.above(0);});",
+                  "pm.environment.set('faceToFaceQuoteId',j.quoteId);pm.environment.set('faceToFacePaymentAmount',Number(j.finalQuotedPrice).toFixed(2));pm.environment.set('faceToFaceSubmitKey',pm.variables.replaceIn('{{$guid}}'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/staff/bookings/face-to-face/quote",
+            "description": "Synthetic non-production writes only. Requires runWrites=true and listed IDs/tokens. Missing prerequisites are skipped, not passed. See booking-sales-channel.md.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerUserId\": \"{{customerUserId}}\",\n  \"reason\": \"Synthetic face-to-face fixture, no real funds\",\n  \"bookingType\": \"TOUR_PACKAGE\",\n  \"vehicleTypeId\": \"{{vehicleTypeId}}\",\n  \"tourPackageId\": \"{{tourPackageId}}\",\n  \"startDatetime\": \"{{startDatetime}}\",\n  \"endDatetime\": \"{{endDatetime}}\",\n  \"passengerCount\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST operator face-to-face booking; replay same command to recover",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runWrites') !== 'true') { pm.execution.skipRequest(); } else {",
+                  "const missing=[\"baseUrl\", \"staffToken\", \"faceToFaceQuoteId\", \"faceToFaceSubmitKey\"].filter(k=>!String(pm.environment.get(k)||'').trim());",
+                  "if(missing.length){console.info('SKIPPED '+pm.info.requestName+': '+missing.join(', '));pm.execution.skipRequest();}",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));",
+                  "if(pm.response.code===201){",
+                  "const j=pm.response.json();pm.test('Face-to-face origin',()=>pm.expect(j.salesChannel).to.eql('FACE_TO_FACE'));pm.environment.set('faceToFaceBookingId',j.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/staff/bookings/face-to-face",
+            "description": "Synthetic non-production writes only. Requires runWrites=true and listed IDs/tokens. Missing prerequisites are skipped, not passed. See booking-sales-channel.md.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quoteId\": \"{{faceToFaceQuoteId}}\",\n  \"idempotencyKey\": \"{{faceToFaceSubmitKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Online booking rejects manual receipt",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.environment.get('runWrites') !== 'true') { pm.execution.skipRequest(); } else {",
+                  "const missing=[\"baseUrl\", \"staffToken\", \"bookingId\", \"paymentAmount\", \"runTag\"].filter(k=>!String(pm.environment.get(k)||'').trim());",
+                  "if(missing.length){console.info('SKIPPED '+pm.info.requestName+': '+missing.join(', '));pm.execution.skipRequest();}",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409',()=>pm.expect(pm.response.code).to.eql(409));",
+                  "if(pm.response.code===409){",
+                  "}"
                 ]
               }
             }
@@ -3688,10 +3798,84 @@
               }
             ],
             "url": "{{baseUrl}}/staff/bookings/{{bookingId}}/payments/manual",
-            "description": "Endpoint: POST /staff/bookings/:bookingId/payments/manual. Expected HTTP 201.\n\nChanges test data; runWrites=true required.\n\nScenario: main.\n\nRequired variables: bookingId, paymentAmount.\n\nMissing prerequisites are reported as skipped, not passed.",
+            "description": "Synthetic non-production writes only. Requires runWrites=true and listed IDs/tokens. Missing prerequisites are skipped, not passed. See booking-sales-channel.md.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"method\": \"CASH\",\n  \"reference\": \"QA-{{runTag}}\",\n  \"amount\": \"{{paymentAmount}}\",\n  \"reason\": \"Synthetic isolated API receipt\"\n}",
+              "raw": "{\n  \"method\": \"CASH\",\n  \"reference\": \"DENIED-{{runTag}}\",\n  \"amount\": \"{{paymentAmount}}\",\n  \"reason\": \"Synthetic online channel denial\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Manual payment and allocation",
+      "item": [
+        {
+          "id": "3af019f1-08b1-570d-abcd-006e3927e238",
+          "name": "POST /staff/bookings/:bookingId/payments/manual",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  " function skip(message){console.info('SKIPPED '+pm.info.requestName+': '+message);if(!pm.execution||typeof pm.execution.skipRequest!=='function')throw new Error('Use a current Postman Desktop version with pm.execution.skipRequest support');pm.execution.skipRequest();}",
+                  " if(!pm.environment.get('baseUrl'))return skip('Select the ROAMIGO complete API environment');",
+                  " const now=Date.now();function initial(k,v){if(!pm.environment.get(k))pm.environment.set(k,v);}initial('runTag','QA-'+now.toString(36));initial('startDatetime',new Date(now-60000).toISOString());initial('endDatetime',new Date(now+7200000).toISOString());initial('licenseExpiry',new Date(now+5*365*86400000).toISOString().slice(0,10));initial('pricingEffectiveFrom',new Date(now).toISOString());initial('pricingEffectiveUntil',new Date(now+86400000).toISOString());pm.variables.set('qaPlate','QA-'+now.toString(36)+'-'+Math.random().toString(36).slice(2,6));pm.variables.set('qaLicense','QA-'+pm.variables.replaceIn('{{$guid}}'));pm.variables.set('vehicleYear',new Date(now).getUTCFullYear());pm.variables.set('requestNonce',pm.variables.replaceIn('{{$guid}}'));",
+                  " ",
+                  " if(pm.environment.get('runWrites')!=='true')return skip('runWrites must be true for isolated test data');",
+                  " ",
+                  " if(![\"main\"].includes(pm.environment.get('scenario')||'main'))return skip('Select scenario: '+\"main\");",
+                  " const required=[\"faceToFaceBookingId\",\"faceToFacePaymentAmount\",\"staffToken\"];const missing=required.filter(k=>!String(pm.environment.get(k)||pm.variables.get(k)||'').trim());if(missing.length)return skip('Missing variables: '+missing.join(', '));",
+                  " ",
+                  " ",
+                  " ",
+                  " for(const key of [\"paymentId\"])pm.environment.unset(key);",
+                  " for(const key of [])pm.variables.set('encoded_'+key,encodeURIComponent(pm.environment.get(key)||''));",
+                  " const template={\"method\":\"CASH\",\"reference\":\"QA-{{runTag}}\",\"amount\":\"{{paymentAmount}}\",\"reason\":\"Synthetic isolated API receipt\"};function resolve(value){if(typeof value==='string')return value.replace(/{{([^}]+)}}/g,(_,key)=>{const v=pm.variables.get(key)??pm.environment.get(key);if(v===undefined||v===null)throw new Error('Missing body variable: '+key);return String(v);});if(Array.isArray(value))return value.map(resolve);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,resolve(v)]));return value;}const body=resolve(template);for(const key of []){body[key]=Number(body[key]);if(!Number.isFinite(body[key]))throw new Error('Invalid numeric body variable: '+key);}pm.request.body.update(JSON.stringify(body));",
+                  " })();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));if(pm.response.code!==201)return;pm.test('JSON response',()=>pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));const j=pm.response.json();const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;pm.test('Record has an ID',()=>pm.expect(j.id).to.match(uuidPattern));pm.test(\"paymentStatus = PENDING\",()=>pm.expect(j.paymentStatus).to.eql(\"PENDING\"));if(j.id!==undefined && j.id!==null) pm.environment.set(\"paymentId\",String(j.id));pm.test('Exact server quote amount',()=>pm.expect(Number(j.amount)).to.eql(Number(pm.environment.get('faceToFacePaymentAmount'))));})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/staff/bookings/{{faceToFaceBookingId}}/payments/manual",
+            "description": "Endpoint: POST /staff/bookings/:bookingId/payments/manual. Expected HTTP 201.\n\nChanges test data; runWrites=true required.\n\nScenario: main.\n\nRequired variables: bookingId, paymentAmount.\n\nMissing prerequisites are reported as skipped, not passed.\nManual-payment fixtures must come from folder 08b; customer online bookings are intentionally ineligible.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"method\": \"CASH\",\n  \"reference\": \"QA-{{runTag}}\",\n  \"amount\": \"{{faceToFacePaymentAmount}}\",\n  \"reason\": \"Synthetic isolated API receipt\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3753,7 +3937,7 @@
             },
             "header": [],
             "url": "{{baseUrl}}/staff/payment-reviews?limit=20",
-            "description": "Endpoint: GET /staff/payment-reviews. Expected HTTP 200.\n\nMissing prerequisites are reported as skipped, not passed."
+            "description": "Endpoint: GET /staff/payment-reviews. Expected HTTP 200.\n\nMissing prerequisites are reported as skipped, not passed.\nManual-payment fixtures must come from folder 08b; customer online bookings are intentionally ineligible."
           },
           "response": []
         },
@@ -3774,7 +3958,7 @@
                   " ",
                   " ",
                   " ",
-                  " const required=[\"bookingId\",\"customerToken\"];const missing=required.filter(k=>!String(pm.environment.get(k)||pm.variables.get(k)||'').trim());if(missing.length)return skip('Missing variables: '+missing.join(', '));",
+                  " const required=[\"faceToFaceBookingId\",\"customerToken\"];const missing=required.filter(k=>!String(pm.environment.get(k)||pm.variables.get(k)||'').trim());if(missing.length)return skip('Missing variables: '+missing.join(', '));",
                   " ",
                   " ",
                   " ",
@@ -3808,8 +3992,8 @@
               ]
             },
             "header": [],
-            "url": "{{baseUrl}}/bookings/{{bookingId}}/payments?limit=20",
-            "description": "Endpoint: GET /bookings/:bookingId/payments. Expected HTTP 200.\n\nRequired variables: bookingId.\n\nMissing prerequisites are reported as skipped, not passed."
+            "url": "{{baseUrl}}/bookings/{{faceToFaceBookingId}}/payments?limit=20",
+            "description": "Endpoint: GET /bookings/:bookingId/payments. Expected HTTP 200.\n\nRequired variables: bookingId.\n\nMissing prerequisites are reported as skipped, not passed.\nManual-payment fixtures must come from folder 08b; customer online bookings are intentionally ineligible."
           },
           "response": []
         },
@@ -3870,7 +4054,7 @@
               }
             ],
             "url": "{{baseUrl}}/staff/payment-reviews/{{paymentId}}/approve",
-            "description": "Endpoint: POST /staff/payment-reviews/:paymentId/approve. Expected HTTP 201.\n\nChanges test data; runWrites=true required.\n\nScenario: main.\n\nRequired variables: paymentId.\n\nMissing prerequisites are reported as skipped, not passed.",
+            "description": "Endpoint: POST /staff/payment-reviews/:paymentId/approve. Expected HTTP 201.\n\nChanges test data; runWrites=true required.\n\nScenario: main.\n\nRequired variables: paymentId.\n\nMissing prerequisites are reported as skipped, not passed.\nManual-payment fixtures must come from folder 08b; customer online bookings are intentionally ineligible.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"Synthetic receipt verified in isolated test data\"\n}",
@@ -3935,7 +4119,7 @@
             },
             "header": [],
             "url": "{{baseUrl}}/staff/assignment-requests?limit=20",
-            "description": "Endpoint: GET /staff/assignment-requests. Expected HTTP 200.\n\nMissing prerequisites are reported as skipped, not passed."
+            "description": "Endpoint: GET /staff/assignment-requests. Expected HTTP 200.\n\nMissing prerequisites are reported as skipped, not passed.\nManual-payment fixtures must come from folder 08b; customer online bookings are intentionally ineligible."
           },
           "response": []
         },
@@ -3991,7 +4175,7 @@
             },
             "header": [],
             "url": "{{baseUrl}}/staff/assignment-requests/{{retryBookingId}}/retry",
-            "description": "Endpoint: POST /staff/assignment-requests/:bookingId/retry. Expected HTTP 201.\n\nChanges test data; runWrites=true required.\n\nScenario: retry.\n\nRequired variables: retryBookingId.\n\nMissing prerequisites are reported as skipped, not passed."
+            "description": "Endpoint: POST /staff/assignment-requests/:bookingId/retry. Expected HTTP 201.\n\nChanges test data; runWrites=true required.\n\nScenario: retry.\n\nRequired variables: retryBookingId.\n\nMissing prerequisites are reported as skipped, not passed.\nManual-payment fixtures must come from folder 08b; customer online bookings are intentionally ineligible."
           },
           "response": []
         }
@@ -9024,6 +9208,84 @@
             "description": "Endpoint: GET /user-profiles. Expected HTTP 401.\n\nMissing prerequisites are reported as skipped, not passed."
           },
           "response": []
+        },
+        {
+          "name": "Missing auth: POST /staff/bookings/face-to-face/quote",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401',()=>pm.expect(pm.response.code).to.eql(401));",
+                  "if(pm.response.code===401){",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/staff/bookings/face-to-face/quote",
+            "description": "Synthetic non-production writes only. Requires runWrites=true and listed IDs/tokens. Missing prerequisites are skipped, not passed. See booking-sales-channel.md.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Missing auth: POST /staff/bookings/face-to-face",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401',()=>pm.expect(pm.response.code).to.eql(401));",
+                  "if(pm.response.code===401){",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/staff/bookings/face-to-face",
+            "description": "Synthetic non-production writes only. Requires runWrites=true and listed IDs/tokens. Missing prerequisites are skipped, not passed. See booking-sales-channel.md.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },

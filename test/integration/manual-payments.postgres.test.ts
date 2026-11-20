@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client } from 'pg';
 import { PrismaClient } from '../../src/generated/prisma/client.js';
-import { AccountStatus, AssignmentStatus, BookingStatus, BookingType, DriverStatus, EmploymentStatus, FuelType, PaymentChannel, PaymentMethod, PaymentStatus, UserRole, VehicleStatus, VehicleTypeName } from '../../src/generated/prisma/enums.js';
+import { AccountStatus, AssignmentStatus, BookingSalesChannel, BookingStatus, BookingType, DriverStatus, EmploymentStatus, FuelType, PaymentChannel, PaymentMethod, PaymentStatus, UserRole, VehicleStatus, VehicleTypeName } from '../../src/generated/prisma/enums.js';
 import { AssignmentsService } from '../../src/assignments/assignments.service.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
+import { BookingsService } from '../../src/bookings/bookings.service.js';
 import { DriverService } from '../../src/driver/driver.service.js';
 
 const connectionString = process.env.ROAMIGO_TEST_DATABASE_URL;
@@ -50,14 +51,67 @@ describe('Manual payments and allocation on isolated Postgres', () => {
   });
   afterAll(async () => { await prisma.$disconnect(); });
 
-  async function booking(day: number, hour = 8, createdAt = new Date('2098-01-01')) {
+  async function booking(day: number, hour = 8, createdAt = new Date('2098-01-01'), salesChannel: BookingSalesChannel = BookingSalesChannel.FACE_TO_FACE) {
     return prisma.booking.create({ data: {
-      customerUserId, vehicleTypeId, bookingType: BookingType.CUSTOM_TRIP,
+      customerUserId, vehicleTypeId, salesChannel, bookingType: BookingType.CUSTOM_TRIP,
       startDatetime: new Date(Date.UTC(2099, 0, day, hour)), endDatetime: new Date(Date.UTC(2099, 0, day, hour + 2)),
       passengerCount: 4, bookingStatus: BookingStatus.AWAITING_PAYMENT,
       totalDistanceKm: '10.00', estimatedDurationMinutes: 120, finalQuotedPrice: '1200.00', createdAt,
     } });
   }
+
+
+  it.each([BookingSalesChannel.ONLINE, BookingSalesChannel.LEGACY_UNKNOWN])('blocks manual receipts at service and database boundaries for %s', async (salesChannel) => {
+    const trip = await booking(20, 8, new Date('2098-01-01'), salesChannel);
+    await expect(payments.record(actorUserId, trip.id, { method: PaymentMethod.CASH, reference: randomUUID(), amount: '1200.00', reason: 'Synthetic denied receipt' })).rejects.toMatchObject({ status: 409 });
+    await expect(prisma.payment.create({ data: { bookingId: trip.id, paymentChannel: PaymentChannel.MANUAL,
+      paymentMethod: PaymentMethod.CASH, amount: '1200.00', currency: 'PHP', paymentStatus: PaymentStatus.PENDING,
+    } })).rejects.toBeDefined();
+    expect(await prisma.payment.count({ where: { bookingId: trip.id } })).toBe(0);
+    expect(await prisma.assignmentRequest.count({ where: { bookingId: trip.id } })).toBe(0);
+  });
+
+  it('cannot reclassify the booking while manual receipts are recorded and reviewed concurrently', async () => {
+    const trip = await booking(21);
+    const [record, reclassify] = await Promise.allSettled([
+      payments.record(actorUserId, trip.id, { method: PaymentMethod.CASH, reference: randomUUID(), amount: '1200.00', reason: 'Synthetic face-to-face receipt' }),
+      prisma.booking.update({ where: { id: trip.id }, data: { salesChannel: BookingSalesChannel.ONLINE } }),
+    ]);
+    expect(record.status).toBe('fulfilled');
+    expect(reclassify.status).toBe('rejected');
+    const receipt = await prisma.payment.findFirstOrThrow({ where: { bookingId: trip.id } });
+    const decisions = await Promise.allSettled([
+      payments.review(actorUserId, receipt.id, true, { reason: 'Synthetic approval' }),
+      payments.review(actorUserId, receipt.id, false, { reason: 'Synthetic competing rejection' }),
+    ]);
+    expect(decisions.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(await prisma.paymentAudit.count({ where: { paymentId: receipt.id, action: 'DECIDED' } })).toBe(1);
+    const paid = (await prisma.payment.findUniqueOrThrow({ where: { id: receipt.id } })).paymentStatus === PaymentStatus.PAID;
+    expect(await prisma.assignmentRequest.count({ where: { bookingId: trip.id } })).toBe(paid ? 1 : 0);
+  });
+
+
+  it('creates and replays a face-to-face booking only through its issuing operator', async () => {
+    const config = await prisma.pricingConfiguration.create({ data: { vehicleTypeId, baseRate: '1200', minAdjustmentPct: '0', maxAdjustmentPct: '0', isActive: false, updatedByAdminId: actorUserId, effectiveFrom: new Date('2098-01-01') } });
+    const gateway = { quote: async () => ({ pricingConfigurationId: config.id, totalDistanceKm: '10.00', estimatedDurationMinutes: 60, finalQuotedPrice: '1200.00', baseRateUsed: '1200.00', adjustmentPercentage: '0.00', modelVersion: 'synthetic' }) };
+    const routing = { preview: async () => ({ stops: [
+      { formattedAddress: 'Synthetic pickup', latitude: 10.3, longitude: 123.9 },
+      { formattedAddress: 'Synthetic dropoff', latitude: 10.4, longitude: 123.9 },
+    ] }) };
+    const bookings = new BookingsService(prisma as never, gateway, routing as never);
+    const quote = await bookings.issueFaceToFaceQuote(actorUserId, { customerUserId, reason: 'Synthetic customer present', vehicleTypeId, bookingType: BookingType.CUSTOM_TRIP,
+      routePlaceIds: ['synthetic-start', 'synthetic-end'], startDatetime: '2099-01-22T08:00:00Z', endDatetime: '2099-01-22T10:00:00Z', passengerCount: 1 });
+    const command = { quoteId: quote.quoteId, idempotencyKey: randomUUID() };
+    await expect(bookings.submitQuote(customerUserId, command)).rejects.toMatchObject({ status: 400 });
+    const trip = await bookings.submitFaceToFaceQuote(actorUserId, command);
+    const replay = await bookings.submitFaceToFaceQuote(actorUserId, command);
+    expect(replay.id).toBe(trip.id);
+    expect(trip.salesChannel).toBe(BookingSalesChannel.FACE_TO_FACE);
+    expect(await prisma.booking.count({ where: { customerUserId, idempotencyKey: command.idempotencyKey } })).toBe(1);
+    expect(await prisma.bookingTransition.findFirst({ where: { bookingId: trip.id, actorUserId } })).not.toBeNull();
+    await expect(prisma.bookingQuote.update({ where: { id: quote.quoteId }, data: { operatorUserId: customerUserId } })).rejects.toBeDefined();
+    await expect(payments.record(actorUserId, trip.id, { method: PaymentMethod.CASH, reference: randomUUID(), amount: '1200.00', reason: 'Synthetic operator receipt' })).resolves.toMatchObject({ paymentStatus: PaymentStatus.PENDING });
+  });
 
   it('concurrent approval commits one audit decision and assignment request', async () => {
     const trip = await booking(1);
@@ -169,7 +223,7 @@ describe('Manual payments and allocation on isolated Postgres', () => {
 
   it('completes a trip atomically and prevents availability overrides during turnaround', async () => {
     const trip = await prisma.booking.create({ data: {
-      customerUserId, vehicleTypeId, bookingType: BookingType.CUSTOM_TRIP, passengerCount: 4,
+      customerUserId, vehicleTypeId, salesChannel, bookingType: BookingType.CUSTOM_TRIP, passengerCount: 4,
       startDatetime: new Date(Date.now() - 3600000), endDatetime: new Date(Date.now() + 7200000),
       bookingStatus: BookingStatus.AWAITING_PAYMENT, totalDistanceKm: '10.00', estimatedDurationMinutes: 180, finalQuotedPrice: '1200.00',
     } });

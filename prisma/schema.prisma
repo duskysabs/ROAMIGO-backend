@@ -96,6 +96,14 @@ enum StopType {
   @@schema("public")
 }
 
+enum BookingSalesChannel {
+  ONLINE
+  FACE_TO_FACE
+  LEGACY_UNKNOWN
+
+  @@schema("public")
+}
+
 enum BookingType {
   TOUR_PACKAGE
   CUSTOM_TRIP
@@ -282,7 +290,8 @@ model UserProfile {
   bookings      Booking[]     @relation("CustomerBookings")
   cancellations BookingCancellation[] @relation("CancellationRequester")
   notifications Notification[]
-  bookingQuotes BookingQuote[]
+  bookingQuotes BookingQuote[] @relation("CustomerBookingQuotes")
+  operatorBookingQuotes BookingQuote[] @relation("OperatorBookingQuotes")
   bookingTransitions BookingTransition[]
   paymentAudits PaymentAudit[]
   assignmentRequests AssignmentRequest[]
@@ -424,6 +433,7 @@ model Booking {
   tourPackageId            String?       @db.Uuid @map("tour_package_id")
   vehicleTypeId            String        @db.Uuid @map("vehicle_type_id")
   bookingType              BookingType   @map("booking_type")
+  salesChannel             BookingSalesChannel @default(LEGACY_UNKNOWN) @map("sales_channel")
   startDatetime            DateTime      @map("start_datetime") @db.Timestamptz(3)
   endDatetime              DateTime      @map("end_datetime") @db.Timestamptz(3)
   passengerCount           Int           @map("passenger_count")
@@ -460,6 +470,9 @@ model Booking {
 model BookingQuote {
   id                   String      @id @default(uuid()) @db.Uuid @map("booking_quote_id")
   customerUserId       String      @db.Uuid @map("customer_user_id")
+  salesChannel         BookingSalesChannel @default(LEGACY_UNKNOWN) @map("sales_channel")
+  operatorUserId       String?     @db.Uuid @map("operator_user_id")
+  operatorReason       String?     @db.VarChar(500) @map("operator_reason")
   bookingType          BookingType @map("booking_type")
   vehicleTypeId        String      @db.Uuid @map("vehicle_type_id")
   tourPackageId        String?     @db.Uuid @map("tour_package_id")
@@ -474,7 +487,8 @@ model BookingQuote {
   bookingId            String?     @unique @db.Uuid @map("booking_id")
   createdAt            DateTime    @default(now()) @db.Timestamptz(3) @map("created_at")
 
-  customer             UserProfile @relation(fields: [customerUserId], references: [userId], onDelete: Restrict)
+  customer             UserProfile @relation("CustomerBookingQuotes", fields: [customerUserId], references: [userId], onDelete: Restrict)
+  operator             UserProfile? @relation("OperatorBookingQuotes", fields: [operatorUserId], references: [userId], onDelete: Restrict)
   vehicleType          VehicleType @relation(fields: [vehicleTypeId], references: [id], onDelete: Restrict)
   tourPackage          TourPackage? @relation(fields: [tourPackageId], references: [id], onDelete: Restrict)
   pricingConfiguration PricingConfiguration @relation(fields: [pricingConfigId], references: [id], onDelete: Restrict)

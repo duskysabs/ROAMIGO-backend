@@ -1,12 +1,12 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { Prisma } from '../../src/generated/prisma/client.js';
-import { AccountStatus, BookingStatus, EmploymentStatus, PaymentChannel, PaymentMethod, PaymentStatus, UserRole } from '../../src/generated/prisma/enums.js';
+import { AccountStatus, BookingSalesChannel, BookingStatus, EmploymentStatus, PaymentChannel, PaymentMethod, PaymentStatus, UserRole } from '../../src/generated/prisma/enums.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
 
 describe('Manual payment recording and review', () => {
   function setup() {
-    const booking = { id: 'booking', finalQuotedPrice: new Prisma.Decimal('1200.00'), bookingStatus: BookingStatus.AWAITING_PAYMENT };
+    const booking = { id: 'booking', salesChannel: BookingSalesChannel.FACE_TO_FACE, finalQuotedPrice: new Prisma.Decimal('1200.00'), bookingStatus: BookingStatus.AWAITING_PAYMENT };
     const current = { id: 'payment', bookingId: 'booking', amount: new Prisma.Decimal('1200.00'), currency: 'PHP', paymentChannel: PaymentChannel.MANUAL, paymentStatus: PaymentStatus.PENDING, booking };
     const tx = {
       $queryRaw: vi.fn(),
@@ -112,6 +112,28 @@ describe('Manual payment recording and review', () => {
   it('rejects a receipt reference already attached to another booking', async () => {
     const { service } = setup();
     await expect(service.record('admin', 'another-booking', { method: PaymentMethod.CASH, reference: 'CASH-1', amount: '1200.00', reason: 'Cash received' })).rejects.toBeInstanceOf(ConflictException);
+  });
+
+
+  it.each([BookingSalesChannel.ONLINE, BookingSalesChannel.LEGACY_UNKNOWN])('denies manual recording and approval for %s without financial writes', async (salesChannel) => {
+    const { service, booking, tx, assignments } = setup();
+    booking.salesChannel = salesChannel;
+    await expect(service.record('admin', 'booking', { method: PaymentMethod.CASH, reference: 'SYNTHETIC-CHANNEL', amount: '1200.00', reason: 'Synthetic receipt' })).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.review('admin', 'payment', true, { reason: 'Synthetic decision' })).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.payment.create).not.toHaveBeenCalled();
+    expect(tx.payment.update).not.toHaveBeenCalled();
+    expect(tx.bookingTransition.create).not.toHaveBeenCalled();
+    expect(tx.assignmentRequest.create).not.toHaveBeenCalled();
+    expect(assignments.process).not.toHaveBeenCalled();
+  });
+
+  it('allows rejection of legacy pending evidence but denies approval replays', async () => {
+    const { service, booking, current, tx, assignments } = setup();
+    booking.salesChannel = BookingSalesChannel.LEGACY_UNKNOWN;
+    await service.review('admin', 'payment', false, { reason: 'Legacy receipt rejected pending provenance review' });
+    tx.payment.findUnique.mockResolvedValue({ ...current, paymentStatus: PaymentStatus.PAID });
+    await expect(service.review('admin', 'payment', true, { reason: 'Retry' })).rejects.toBeInstanceOf(ConflictException);
+    expect(assignments.process).not.toHaveBeenCalled();
   });
 
   it('hides payment reads for another customer booking', async () => {
