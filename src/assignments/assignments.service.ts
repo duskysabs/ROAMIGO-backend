@@ -9,6 +9,9 @@ import { DispatchPolicy } from './dispatch-policy.js';
 
 export type AllocationResult = { bookingId: string; status: 'ASSIGNED' | 'PENDING' | 'COMPLETED'; reason: string | null };
 
+// Allocation performs multiple guarded writes against a potentially remote database.
+const ALLOCATION_TRANSACTION_TIMEOUT_MS = 15_000;
+
 @Injectable()
 export class AssignmentsService {
   private readonly logger = new Logger(AssignmentsService.name);
@@ -122,10 +125,11 @@ export class AssignmentsService {
           return { bookingId, status: 'ASSIGNED', reason: null };
         }
         return fail('NO_ELIGIBLE_PAIR');
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
-    } catch {
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: ALLOCATION_TRANSACTION_TIMEOUT_MS });
+    } catch (error) {
       // A durable pending request survives database conflicts and process interruption.
-      this.logger.warn('Allocation attempt requires retry; payment remains recorded');
+      const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : 'UNCLASSIFIED';
+      this.logger.warn(`Allocation attempt requires retry; payment remains recorded (code=${code})`);
       return { bookingId, status: 'PENDING', reason: 'RETRY_REQUIRED' };
     }
   }

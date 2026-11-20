@@ -102,6 +102,12 @@ reference and audit evidence needed for verification.
 Payment approval and its audit, booking transition and assignment request are
 one transaction. Allocation happens after that commit in a separate transaction.
 A process crash or allocation error cannot erase received payment evidence.
+Allocation uses a bounded 15-second transaction deadline because its eligibility
+checks, locks and dispatch writes can exceed Prisma's default five seconds when
+the database is remote. Other transactions retain their existing deadlines.
+Failures log only the Prisma error code (or UNCLASSIFIED), without database
+messages, SQL parameters or credentials. They still return RETRY_REQUIRED and
+preserve the paid booking for recovery.
 There is no background poller in this slice. Staff can inspect pending requests
 and retry them. Retrying approval also retries allocation without another payment
 decision. This is a specific durable command handoff, not the general outbox in
