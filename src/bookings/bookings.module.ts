@@ -8,11 +8,12 @@ import { BookingsService } from './bookings.service.js';
 import { BookingReviewsController } from './booking-reviews.controller.js';
 import { BookingReviewsService } from './booking-reviews.service.js';
 import { FaceToFaceBookingsController } from './face-to-face-bookings.controller.js';
+import { UnpaidCancellationsService } from './unpaid-cancellations.service.js';
 
 @Module({
   imports: [AuthModule, PrismaModule, PricingModule, RoutingModule],
   controllers: [BookingsController, BookingReviewsController, FaceToFaceBookingsController],
-  providers: [BookingsService, BookingReviewsService],
+  providers: [BookingsService, BookingReviewsService, UnpaidCancellationsService],
   exports: [BookingsService, BookingReviewsService],
 })
 export class BookingsModule {}

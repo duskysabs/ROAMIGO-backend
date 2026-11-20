@@ -8,6 +8,7 @@ import { FaceToFaceBookingsController } from '../../src/bookings/face-to-face-bo
 import { BookingsController } from '../../src/bookings/bookings.controller.js';
 import { BookingsService } from '../../src/bookings/bookings.service.js';
 import { BookingReviewsService } from '../../src/bookings/booking-reviews.service.js';
+import { UnpaidCancellationsService } from '../../src/bookings/unpaid-cancellations.service.js';
 
 describe('Booking sales channel HTTP boundary', () => {
   let app: INestApplication;
@@ -19,6 +20,7 @@ describe('Booking sales channel HTTP boundary', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({ controllers: [FaceToFaceBookingsController, BookingsController],
       providers: [ { provide: BookingsService, useValue: bookings }, { provide: BookingReviewsService, useValue: {} },
+        { provide: UnpaidCancellationsService, useValue: {} },
         { provide: AuthService, useValue: { getUser } } ],
     }).compile();
     app = module.createNestApplication();

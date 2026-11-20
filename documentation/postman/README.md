@@ -16,7 +16,7 @@ leave login credentials blank; the identity requests capture the user IDs.
 Never commit populated environments or tokens. These exports contain no secrets
 and do not import the backend `.env` file.
 
-The suite contains 72 current endpoints, 164 request templates and 63 individual
+The suite contains 73 current endpoints, 168 request templates and 64 individual
 missing-auth checks. [The coverage inventory](all-endpoints-coverage.md) maps each
 endpoint to its controller and request folder. Assertions check exact HTTP codes,
 response shapes, ownership, payment states and Driver transitions. This is
@@ -173,3 +173,15 @@ a manual receipt against the ONLINE booking returns 409. Replay only the submit
 request with the same captured key when checking idempotency. All new writes
 retain the runWrites=false default; skips are not verification passes. Apply the
 reviewed channel migration only to the intended non-production environment first.
+
+
+## Owned unpaid cancellation (#65)
+
+Folder 16 requires runWrites=true, scenario=unpaidCancellation and an explicit
+cancelBookingId for a disposable owned AWAITING_PAYMENT booking. Provide the
+Customer token and clear unpaidCancellationId when changing fixtures. Run both
+requests against the same booking to verify the original record is replayed.
+This does not refund pending receipt evidence or cancel a remote checkout.
+Folder 15 adds Staff denial; folder 14 adds missing-auth coverage. Default
+writes remain disabled. Test paid/assigned denial and concurrent approval using
+the dedicated service/HTTP/isolated-Postgres suites, not a real-money booking.

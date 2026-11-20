@@ -9286,6 +9286,43 @@
               }
             }
           }
+        },
+        {
+          "name": "Missing auth: POST /bookings/:bookingId/cancel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401',()=>pm.expect(pm.response.code).to.eql(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/bookings/{{cancelBookingId}}/cancel",
+            "description": "Only a disposable owned AWAITING_PAYMENT booking with no approved payment/assignment is eligible. This does not issue a refund. Run the two requests with the same cancelBookingId to verify replay.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Synthetic unpaid cancellation; no real funds\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -9977,6 +10014,176 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Staff cannot use Customer cancellation",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.environment.get('runWrites')!=='true'||pm.environment.get('scenario')!=='unpaidCancellation'){console.info('SKIPPED: select unpaidCancellation and opt in to writes');pm.execution.skipRequest();}",
+                  "if(!pm.environment.get('cancelBookingId')||!pm.environment.get('staffToken')){console.info('SKIPPED: provide disposable owned unpaid booking ID and token');pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 403',()=>pm.expect(pm.response.code).to.eql(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{staffToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/bookings/{{cancelBookingId}}/cancel",
+            "description": "Only a disposable owned AWAITING_PAYMENT booking with no approved payment/assignment is eligible. This does not issue a refund. Run the two requests with the same cancelBookingId to verify replay.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Synthetic unpaid cancellation; no real funds\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Owned unpaid cancellation",
+      "description": "Explicit scenario unpaidCancellation only. Never point cancelBookingId at paid, assigned or real customer data. Clear unpaidCancellationId when changing fixtures.",
+      "item": [
+        {
+          "name": "Cancel disposable unpaid booking",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.environment.get('runWrites')!=='true'||pm.environment.get('scenario')!=='unpaidCancellation'){console.info('SKIPPED: select unpaidCancellation and opt in to writes');pm.execution.skipRequest();}",
+                  "if(!pm.environment.get('cancelBookingId')||!pm.environment.get('customerToken')){console.info('SKIPPED: provide disposable owned unpaid booking ID and token');pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));",
+                  "if(pm.response.code===201){const j=pm.response.json();pm.test('Completed zero-fee cancellation',()=>{pm.expect(j.bookingStatus).to.eql('CANCELLED');pm.expect(j.cancellationStatus).to.eql('COMPLETED');pm.expect(j.penaltyAmount).to.eql('0.00');pm.expect(j.policyVersion).to.eql('unpaid-customer-v1');});const original=pm.environment.get('unpaidCancellationId');if(original)pm.test('Same cancellation on replay',()=>pm.expect(j.id).to.eql(original));pm.environment.set('unpaidCancellationId',j.id);}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/bookings/{{cancelBookingId}}/cancel",
+            "description": "Only a disposable owned AWAITING_PAYMENT booking with no approved payment/assignment is eligible. This does not issue a refund. Run the two requests with the same cancelBookingId to verify replay.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Synthetic unpaid cancellation; no real funds\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Replay cancellation, preserving original record",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.environment.get('runWrites')!=='true'||pm.environment.get('scenario')!=='unpaidCancellation'){console.info('SKIPPED: select unpaidCancellation and opt in to writes');pm.execution.skipRequest();}",
+                  "if(!pm.environment.get('cancelBookingId')||!pm.environment.get('customerToken')){console.info('SKIPPED: provide disposable owned unpaid booking ID and token');pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));",
+                  "if(pm.response.code===201){const j=pm.response.json();pm.test('Completed zero-fee cancellation',()=>{pm.expect(j.bookingStatus).to.eql('CANCELLED');pm.expect(j.cancellationStatus).to.eql('COMPLETED');pm.expect(j.penaltyAmount).to.eql('0.00');pm.expect(j.policyVersion).to.eql('unpaid-customer-v1');});const original=pm.environment.get('unpaidCancellationId');if(original)pm.test('Same cancellation on replay',()=>pm.expect(j.id).to.eql(original));pm.environment.set('unpaidCancellationId',j.id);}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/bookings/{{cancelBookingId}}/cancel",
+            "description": "Only a disposable owned AWAITING_PAYMENT booking with no approved payment/assignment is eligible. This does not issue a refund. Run the two requests with the same cancelBookingId to verify replay.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Synthetic unpaid cancellation; no real funds\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     }

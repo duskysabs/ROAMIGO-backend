@@ -94,3 +94,11 @@ Not implemented endpoints (refunds, general turnaround release, partner APIs and
 Folder 08b includes ONLINE manual-receipt denial. Folder 09 uses FACE_TO_FACE
 fixture variables. The authored totals are now 72 endpoints, 164 templates and
 63 missing-auth checks. These counts do not claim live execution.
+
+
+### Unpaid cancellation extension (#65)
+
+POST /bookings/:bookingId/cancel is covered by folder 16 owner/replay requests,
+folder 15 Staff denial and folder 14 missing-auth. Authored collection totals:
+73 endpoints, 168 templates and 64 missing-auth cases. No new collection requests
+were executed during implementation. See ../api/unpaid-cancellation.md.
