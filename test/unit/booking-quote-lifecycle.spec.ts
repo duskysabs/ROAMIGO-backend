@@ -92,7 +92,7 @@ describe('BookingsService quote lifecycle', () => {
     const service = new BookingsService(prisma as never, {} as never, {} as never);
     await expect(service.submitQuote('customer', command)).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.booking.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: { customerUserId: 'customer', idempotencyKey: command.idempotencyKey },
+      where: { customerUserId: 'customer', idempotencyKey: command.idempotencyKey, salesChannel: 'ONLINE' },
     }));
   });
 

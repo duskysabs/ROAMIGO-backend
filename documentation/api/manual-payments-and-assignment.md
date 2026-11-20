@@ -11,6 +11,12 @@ Authorization is checked by the service as well as the route guards. No
 accounting-specific permission exists yet. These permissions do not create a
 driver trip API.
 
+Manual entry and approval now also require a server-owned FACE_TO_FACE booking
+channel. Customer submissions are ONLINE; ambiguous old rows are LEGACY_UNKNOWN
+and cannot be approved through manual-payment retries. See
+[booking-sales-channel.md](./booking-sales-channel.md) for the guarded operator
+creation path, migration rules and pending PayMongo coordination.
+
 The operator gate applies to payment/allocation queues. Authentication now
 loads Driver linkage and RolesGuard denies linked identities access to generic
 STAFF routes as well.

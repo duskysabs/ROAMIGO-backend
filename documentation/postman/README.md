@@ -16,7 +16,7 @@ leave login credentials blank; the identity requests capture the user IDs.
 Never commit populated environments or tokens. These exports contain no secrets
 and do not import the backend `.env` file.
 
-The suite contains 70 current endpoints, 159 request templates and 61 individual
+The suite contains 72 current endpoints, 164 request templates and 63 individual
 missing-auth checks. [The coverage inventory](all-endpoints-coverage.md) maps each
 endpoint to its controller and request folder. Assertions check exact HTTP codes,
 response shapes, ownership, payment states and Driver transitions. This is
@@ -160,3 +160,16 @@ If Supabase email confirmation is enabled, the employee must confirm the email
 before logging in, but the Administrator may still create the Staff profile
 from the signup response's user ID. The main workflow ends by reactivating the
 Staff record. The final deactivation request is an optional terminal action.
+
+
+## Booking-channel policy (#63)
+
+Folder 08 creates ONLINE customer bookings. Run folder 08b using active
+non-driver Staff and an existing Customer to quote/submit a FACE_TO_FACE booking.
+It captures separate quote, submission-key, booking and amount variables. Folder
+09 uses those face-to-face variables for manual receipt/review. Its old online
+booking fixture must not be reclassified. Folder 08b also checks that recording
+a manual receipt against the ONLINE booking returns 409. Replay only the submit
+request with the same captured key when checking idempotency. All new writes
+retain the runWrites=false default; skips are not verification passes. Apply the
+reviewed channel migration only to the intended non-production environment first.

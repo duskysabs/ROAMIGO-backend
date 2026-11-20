@@ -7,10 +7,11 @@ import { BookingsController } from './bookings.controller.js';
 import { BookingsService } from './bookings.service.js';
 import { BookingReviewsController } from './booking-reviews.controller.js';
 import { BookingReviewsService } from './booking-reviews.service.js';
+import { FaceToFaceBookingsController } from './face-to-face-bookings.controller.js';
 
 @Module({
   imports: [AuthModule, PrismaModule, PricingModule, RoutingModule],
-  controllers: [BookingsController, BookingReviewsController],
+  controllers: [BookingsController, BookingReviewsController, FaceToFaceBookingsController],
   providers: [BookingsService, BookingReviewsService],
   exports: [BookingsService, BookingReviewsService],
 })
