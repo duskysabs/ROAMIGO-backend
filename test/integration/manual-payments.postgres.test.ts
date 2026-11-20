@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client } from 'pg';
-import { PrismaClient } from '../../src/generated/prisma/client.js';
+import { PrismaClient, type Prisma } from '../../src/generated/prisma/client.js';
 import { AccountStatus, AssignmentStatus, BookingSalesChannel, BookingStatus, BookingType, DriverStatus, EmploymentStatus, FuelType, PaymentChannel, PaymentMethod, PaymentStatus, UserRole, VehicleStatus, VehicleTypeName } from '../../src/generated/prisma/enums.js';
 import { AssignmentsService } from '../../src/assignments/assignments.service.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
+import { UnpaidCancellationsService } from '../../src/bookings/unpaid-cancellations.service.js';
 import { BookingsService } from '../../src/bookings/bookings.service.js';
 import { DriverService } from '../../src/driver/driver.service.js';
 
@@ -20,6 +21,7 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(target.hostname) || !/^\/[a-zA
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const assignments = new AssignmentsService(prisma as never);
 const payments = new PaymentsService(prisma as never, assignments);
+const cancellations = new UnpaidCancellationsService(prisma as never);
 const drivers = new DriverService(prisma as never, assignments);
 const actorUserId = randomUUID();
 const customerUserId = randomUUID();
@@ -111,6 +113,54 @@ describe('Manual payments and allocation on isolated Postgres', () => {
     expect(await prisma.bookingTransition.findFirst({ where: { bookingId: trip.id, actorUserId } })).not.toBeNull();
     await expect(prisma.bookingQuote.update({ where: { id: quote.quoteId }, data: { operatorUserId: customerUserId } })).rejects.toBeDefined();
     await expect(payments.record(actorUserId, trip.id, { method: PaymentMethod.CASH, reference: randomUUID(), amount: '1200.00', reason: 'Synthetic operator receipt' })).resolves.toMatchObject({ paymentStatus: PaymentStatus.PENDING });
+  });
+
+
+  it('serializes duplicate owner cancellation and never exposes the booking to another Customer', async () => {
+    const trip = await booking(24);
+    const otherCustomer = randomUUID();
+    await prisma.authUser.create({ data: { id: otherCustomer } });
+    await prisma.userProfile.create({ data: { userId: otherCustomer, firstName: 'Fixture', lastName: marker, role: UserRole.CUSTOMER, accountStatus: AccountStatus.ACTIVE } });
+    await expect(cancellations.cancel(otherCustomer, trip.id, { reason: 'Synthetic cross-owner denial' })).rejects.toMatchObject({ status: 404 });
+    const results = await Promise.all([
+      cancellations.cancel(customerUserId, trip.id, { reason: 'Synthetic original request' }),
+      cancellations.cancel(customerUserId, trip.id, { reason: 'Synthetic duplicate request' }),
+    ]);
+    expect(results[0].id).toBe(results[1].id);
+    expect(await prisma.bookingCancellation.count({ where: { bookingId: trip.id } })).toBe(1);
+    expect(await prisma.bookingTransition.count({ where: { bookingId: trip.id, nextState: BookingStatus.CANCELLED } })).toBe(1);
+    expect(await prisma.notification.count({ where: { recipientUserId: customerUserId, actionUrl: `/my-bookings/${trip.id}` } })).toBe(1);
+    expect(await prisma.payment.count({ where: { bookingId: trip.id } })).toBe(0);
+  });
+
+  it('lets only payment approval or unpaid cancellation win, preserving the other outcome as a conflict', async () => {
+    const trip = await booking(25);
+    const receipt = await payments.record(actorUserId, trip.id, { method: PaymentMethod.CASH, reference: randomUUID(), amount: '1200.00', reason: 'Synthetic race receipt' });
+    const outcomes = await Promise.allSettled([
+      cancellations.cancel(customerUserId, trip.id, { reason: 'Synthetic cancellation race' }),
+      payments.review(actorUserId, receipt.id, true, { reason: 'Synthetic payment race' }),
+    ]);
+    expect(outcomes.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    const saved = await prisma.booking.findUniqueOrThrow({ where: { id: trip.id } });
+    const cancelled = saved.bookingStatus === BookingStatus.CANCELLED;
+    expect(await prisma.bookingCancellation.count({ where: { bookingId: trip.id } })).toBe(cancelled ? 1 : 0);
+    expect(await prisma.assignmentRequest.count({ where: { bookingId: trip.id } })).toBe(cancelled ? 0 : 1);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: receipt.id } })).paymentStatus).toBe(cancelled ? PaymentStatus.PENDING : PaymentStatus.PAID);
+    if (cancelled) expect(await prisma.bookingAssignment.count({ where: { bookingId: trip.id } })).toBe(0);
+  });
+
+  it('rolls cancellation and transition back if the atomic notification write fails', async () => {
+    const trip = await booking(26);
+    const faulty = new UnpaidCancellationsService({ $transaction: (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      prisma.$transaction(tx => work(new Proxy(tx, { get(target, key) {
+        if (key === 'notification') return { createMany: async () => { throw new Error('Synthetic notification failure'); } };
+        return Reflect.get(target, key);
+      } }))),
+    } as never);
+    await expect(faulty.cancel(customerUserId, trip.id, { reason: 'Synthetic rollback fixture' })).rejects.toThrow('Synthetic notification failure');
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: trip.id } })).bookingStatus).toBe(BookingStatus.AWAITING_PAYMENT);
+    expect(await prisma.bookingCancellation.count({ where: { bookingId: trip.id } })).toBe(0);
+    expect(await prisma.bookingTransition.count({ where: { bookingId: trip.id, nextState: BookingStatus.CANCELLED } })).toBe(0);
   });
 
   it('concurrent approval commits one audit decision and assignment request', async () => {
