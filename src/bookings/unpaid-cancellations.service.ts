@@ -13,8 +13,10 @@ export class UnpaidCancellationsService {
   async cancel(customerUserId: string, bookingId: string, dto: CancelUnpaidBookingDto) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT user_id FROM public.user_profile WHERE user_id = ${customerUserId}::uuid FOR UPDATE`;
-      const customer = await tx.userProfile.findUnique({ where: { userId: customerUserId }, select: { role: true, accountStatus: true } });
-      if (!customer || customer.role !== UserRole.CUSTOMER || customer.accountStatus !== AccountStatus.ACTIVE) {
+      const customer = await tx.userProfile.findUnique({ where: { userId: customerUserId }, select: {
+        role: true, accountStatus: true, staff: { select: { driver: { select: { id: true } } } },
+      } });
+      if (!customer || customer.role !== UserRole.CUSTOMER || customer.accountStatus !== AccountStatus.ACTIVE || customer.staff?.driver) {
         throw new ForbiddenException('An active Customer profile is required');
       }
       // Payment review locks this same row before deciding or creating a handoff.

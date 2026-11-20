@@ -57,6 +57,12 @@ describe('Owned unpaid booking cancellation', () => {
     await expect(service.cancel('customer', 'booking', { reason: 'Cancel request' })).rejects.toBeInstanceOf(ConflictException);
     expect(tx.bookingCancellation.create).not.toHaveBeenCalled();
   });
+  it('does not grant Customer cancellation to a driver-linked identity with a stale Customer role', async () => {
+    const { service, tx } = setup();
+    tx.userProfile.findUnique.mockResolvedValue({ role: UserRole.CUSTOMER, accountStatus: AccountStatus.ACTIVE, staff: { driver: { id: 'driver' } } } as never);
+    await expect(service.cancel('customer', 'booking', { reason: 'Cancel request' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tx.bookingCancellation.create).not.toHaveBeenCalled();
+  });
   it('rejects approved funds or assignment handoff even if the booking state is inconsistent', async () => {
     for (const gate of ['payment', 'bookingAssignment', 'assignmentRequest'] as const) {
       const { service, tx } = setup();
