@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
 import { AssignmentsService } from '../../src/assignments/assignments.service.js';
+import { Prisma } from '../../src/generated/prisma/client.js';
 import { BookingStatus } from '../../src/generated/prisma/enums.js';
 
 describe('Paid booking allocation', () => {
@@ -25,8 +27,11 @@ describe('Paid booking allocation', () => {
   }
 
   it('creates one interval-bound assignment and dispatches after allocation', async () => {
-    const { service, tx, booking } = setup();
+    const { service, tx, booking, prisma } = setup();
     await expect(service.process('booking')).resolves.toEqual({ bookingId: 'booking', status: 'ASSIGNED', reason: null });
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: 'ReadCommitted', timeout: 15_000,
+    });
     expect(tx.bookingAssignment.create).toHaveBeenCalledWith({ data: expect.objectContaining({
       vehicleId: 'vehicle', driverId: 'driver', reservedFrom: booking.startDatetime, reservedUntil: booking.endDatetime,
     }) });
@@ -87,6 +92,21 @@ describe('Paid booking allocation', () => {
     tx.payment.findFirst.mockResolvedValue(null as never);
     await expect(service.process('booking')).resolves.toMatchObject({ status: 'PENDING', reason: 'FULL_PAYMENT_REQUIRED' });
     expect(tx.bookingAssignment.create).not.toHaveBeenCalled();
+  });
+
+  it('keeps transaction expiry retryable and logs only its safe error code', async () => {
+    const { service, prisma, tx } = setup();
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    prisma.$transaction.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError(
+      'Private transaction context must not be logged', { code: 'P2028', clientVersion: 'test' },
+    ));
+    try {
+      await expect(service.process('booking')).resolves.toEqual({ bookingId: 'booking', status: 'PENDING', reason: 'RETRY_REQUIRED' });
+      expect(tx.booking.update).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith('Allocation attempt requires retry; payment remains recorded (code=P2028)');
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('does not reuse a Driver who already declined that booking', async () => {
