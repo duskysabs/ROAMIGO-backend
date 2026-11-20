@@ -16,11 +16,17 @@ leave login credentials blank; the identity requests capture the user IDs.
 Never commit populated environments or tokens. These exports contain no secrets
 and do not import the backend `.env` file.
 
-The suite contains 70 current endpoints, 159 request templates and 61 individual
+The suite contains 74 current endpoints, 167 request templates and 65 individual
 missing-auth checks. [The coverage inventory](all-endpoints-coverage.md) maps each
 endpoint to its controller and request folder. Assertions check exact HTTP codes,
 response shapes, ownership, payment states and Driver transitions. This is
 authored coverage, not a report of successful API execution.
+
+Folder `16 Notification inbox` lists the logged-in Customer's notifications and
+unread count. It captures `notificationId` from the first unread result when one
+exists. Its mark-read requests require `runWrites=true`; marking one also
+requires a captured notification ID. Folder `14` includes missing-auth checks
+for all four inbox endpoints.
 
 ### First run
 

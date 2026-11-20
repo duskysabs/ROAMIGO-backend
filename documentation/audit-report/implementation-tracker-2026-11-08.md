@@ -25,7 +25,7 @@ are implemented. Verification and migrations remain not run. See the
 | Internal assignment | Implemented initial slice | [Allocator](../../src/assignments/assignments.service.ts), [eligibility](../../src/fleet/allocation-eligibility.ts): durable pending request, original-submission priority among overlapping paid requests, locked allocation and database overlap constraints. Full replacement/recovery/turnaround remains. |
 | Driver trips | Implemented initial slice | Owned reads, acknowledgement/decline, en-route/arrival/start/completion, external navigation, immutable completion snapshot and turnaround holds. Full release remains #28. |
 | Trip changes, general aftercare, external API | Not implemented | Added-stop consent/repricing, cancellation/refund/receivables, full turnaround and partner API remain open. |
-| Notifications and audit | Partial | Existing booking notifications/transitions plus payment audit/request records. General delivery/outbox/read APIs remain. |
+| Notifications and audit | Partial | Booking notifications/transitions, payment audit/request records, and a recipient-owned inbox/read API exist. General delivery and outbox APIs remain. |
 
 ## Delivery records
 
@@ -44,7 +44,7 @@ are implemented. Verification and migrations remain not run. See the
 | [#35](https://github.com/duskysabs/ROAMIGO-backend/issues/35) | Cross-repository dependency, not verifiable from backend source. Backend catalog/quote/submit/read APIs exist; actual frontend integration, loading/error behavior and end-to-end rehearsal require evidence from the frontend owner/repository. Keep open. |
 | [#32](https://github.com/duskysabs/ROAMIGO-backend/issues/32) | Awaiting client/product decisions. No approved partner field allowlist/key governance or external API implementation was found. Do not expose private records or invent consent/approval. Keep open. |
 | [#30](https://github.com/duskysabs/ROAMIGO-backend/issues/30) | Not implemented as the requested cross-domain operational query API. Existing review/fleet lists and #55's payment/allocation queues cover narrower use cases. Full booking timeline, provider failure and admin audit-query endpoints remain. Keep open. |
-| [#29](https://github.com/duskysabs/ROAMIGO-backend/issues/29) | Partial. Booking/review and automatic dispatch/recovery write notification rows. General inbox/read status, durable external delivery and scheduled reminders remain. |
+| [#29](https://github.com/duskysabs/ROAMIGO-backend/issues/29) | Partial. Booking/review and automatic dispatch/recovery write notification rows; an authenticated inbox and read status API now exist. Durable external delivery and scheduled reminders remain. |
 | [#28](https://github.com/duskysabs/ROAMIGO-backend/issues/28) | Partial. Start/completion persist operational holds and completion blocks both resources in TURNAROUND. Checklists, defects, configured release validation and automatic return to availability remain. |
 | [#27](https://github.com/duskysabs/ROAMIGO-backend/issues/27) | Not implemented. No driver stop-request, customer consent/repricing, atomic route revision or added receivable API exists. Depends on driver execution and financial boundaries. Keep open. |
 | [#26](https://github.com/duskysabs/ROAMIGO-backend/issues/26) | Initial source slice implemented in #57: automatic dispatch, owned reads/navigation, legal Driver commands, response deadlines, completion snapshot and immutable audit. Hosted scheduling, runtime evidence and release/privacy retention work remain; parent stays open. |

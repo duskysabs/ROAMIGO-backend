@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "ac4475a4-eafd-54cc-a388-6ae59057bf73",
     "name": "ROAMIGO: Complete Backend API",
-    "description": "All 70 declared NestJS endpoints at dev revision 98fee6570219a9788286a318baadd32895453fbe. Import the matching blank environment. Start with reads and missing-auth checks; enable writes only for isolated test fixtures. Select one scenario at a time. See README and all-endpoints-coverage.md. API requests have not been executed.",
+    "description": "All 74 declared NestJS endpoints, including Notification Inbox. Import the matching blank environment. Start with reads and missing-auth checks; enable writes only for isolated test fixtures. Select one scenario at a time. See README and all-endpoints-coverage.md. API requests have not been executed.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -9024,6 +9024,150 @@
             "description": "Endpoint: GET /user-profiles. Expected HTTP 401.\n\nMissing prerequisites are reported as skipped, not passed."
           },
           "response": []
+        },
+        {
+          "id": "e0781783-6ad8-5ab4-8beb-b28d83089d4b",
+          "name": "No token: GET /notifications",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 401', () => pm.expect(pm.response.code).to.eql(401));",
+                  "if (pm.response.code !== 401) return;",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
+        },
+        {
+          "id": "9ffc584e-51e8-5abe-9a70-85bea3d59814",
+          "name": "No token: GET /notifications/unread-count",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 401', () => pm.expect(pm.response.code).to.eql(401));",
+                  "if (pm.response.code !== 401) return;",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications/unread-count",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
+        },
+        {
+          "id": "730e0350-da8b-5072-9a5a-4fae447fe8cd",
+          "name": "No token: PATCH /notifications/00000000-0000-4000-8000-000000000101/read",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 401', () => pm.expect(pm.response.code).to.eql(401));",
+                  "if (pm.response.code !== 401) return;",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications/00000000-0000-4000-8000-000000000101/read",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
+        },
+        {
+          "id": "c8e493d2-544d-539f-a1d5-190912b8de4b",
+          "name": "No token: PATCH /notifications/read-all",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 401', () => pm.expect(pm.response.code).to.eql(401));",
+                  "if (pm.response.code !== 401) return;",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications/read-all",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
         }
       ]
     },
@@ -9715,6 +9859,197 @@
             }
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "16 Notification inbox",
+      "item": [
+        {
+          "id": "4e443533-3684-5f49-a5c6-a413d12fec94",
+          "name": "GET /notifications",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();",
+                  "if (!pm.environment.get('customerToken')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "const j = pm.response.json();",
+                  "pm.test('Page shape', () => { pm.expect(j.data).to.be.an('array'); pm.expect(j.meta).to.include.keys('page','limit','total','totalPages'); });",
+                  "if (j.data.length) pm.environment.set('notificationId', j.data[0].id);",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications?page=1&limit=20&status=unread",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
+        },
+        {
+          "id": "1933df47-421c-594b-b862-a5c9cb92a503",
+          "name": "GET /notifications/unread-count",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();",
+                  "if (!pm.environment.get('customerToken')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "pm.test('Unread count', () => pm.expect(pm.response.json().count).to.be.a('number')); ",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications/unread-count",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
+        },
+        {
+          "id": "b192701f-3ef7-56b9-9007-b093b13e19eb",
+          "name": "PATCH /notifications/:notificationId/read",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();",
+                  "if (!pm.environment.get('customerToken')) pm.execution.skipRequest();",
+                  "if (pm.environment.get('runWrites') !== 'true') pm.execution.skipRequest();",
+                  "if (!pm.environment.get('notificationId')) pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "const j = pm.response.json();",
+                  "pm.test('Read notification', () => { pm.expect(j.id).to.eql(pm.environment.get('notificationId')); pm.expect(j.isRead).to.eql(true); pm.expect(j.readAt).to.be.a('string'); });",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications/{{notificationId}}/read",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
+        },
+        {
+          "id": "22999ef4-d8f9-5d20-a919-46366919e2cb",
+          "name": "PATCH /notifications/read-all",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get('baseUrl')) pm.execution.skipRequest();",
+                  "if (!pm.environment.get('customerToken')) pm.execution.skipRequest();",
+                  "if (pm.environment.get('runWrites') !== 'true') pm.execution.skipRequest();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "(function(){",
+                  "pm.test('HTTP 200', () => pm.expect(pm.response.code).to.eql(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "pm.test('Updated count', () => pm.expect(pm.response.json().updatedCount).to.be.a('number')); ",
+                  "})();"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [],
+            "url": "{{baseUrl}}/notifications/read-all",
+            "description": "Notification inbox API. Requires an active profile unless this is a missing-auth check."
+          }
         }
       ]
     }
