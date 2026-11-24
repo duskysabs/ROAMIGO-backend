@@ -56,6 +56,43 @@ describe('Master-data administration', () => {
     await expect(prices.setActive('admin', 'price', true)).rejects.toBeInstanceOf(ConflictException);
     expect(tx.pricingConfiguration.update).not.toHaveBeenCalled(); expect(tx.masterDataAudit.create).not.toHaveBeenCalled();
   });
+  it('switches overlapping pricing and audits the replacement in the same transaction', async () => {
+    const { prices, tx, price } = setup();
+    price.effectiveFrom = new Date('2000-01-01');
+    const old = { ...price, id: 'old-price', isActive: true };
+    tx.pricingConfiguration.findMany.mockResolvedValue([old]);
+    tx.pricingConfiguration.update.mockImplementation(async ({ where, data }: { where: { id: string }; data: { isActive: boolean; updatedByAdminId: string } }) => ({ ...(where.id === old.id ? old : price), ...data }));
+    await prices.switchActive('admin', price.id, [old.id]);
+    expect(tx.pricingConfiguration.update.mock.calls.map(([arg]) => arg)).toEqual([
+      { where: { id: old.id }, data: { isActive: false, updatedByAdminId: 'admin' } },
+      { where: { id: price.id }, data: { isActive: true, updatedByAdminId: 'admin' } },
+    ]);
+    expect(tx.masterDataAudit.create).toHaveBeenCalledTimes(2);
+    expect(tx.$queryRaw.mock.invocationCallOrder.at(-1)).toBeLessThan(tx.pricingConfiguration.findMany.mock.invocationCallOrder[0]!);
+  });
+  it('rejects stale switch confirmations before changing or auditing any price', async () => {
+    const { prices, tx, price } = setup(); price.effectiveFrom = new Date('2000-01-01');
+    tx.pricingConfiguration.findMany.mockResolvedValue([{ ...price, id: 'changed-price', isActive: true }]);
+    await expect(prices.switchActive('admin', price.id, ['old-price'])).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.pricingConfiguration.update).not.toHaveBeenCalled();
+    expect(tx.masterDataAudit.create).not.toHaveBeenCalled();
+  });
+  it('leaves current pricing intact when a replacement is future-dated or audit persistence fails', async () => {
+    const { prices, tx, price } = setup();
+    await expect(prices.switchActive('admin', price.id, [])).rejects.toMatchObject({ status: 400 });
+    expect(tx.pricingConfiguration.update).not.toHaveBeenCalled();
+    price.effectiveFrom = new Date('2000-01-01');
+    tx.pricingConfiguration.findMany.mockResolvedValue([{ ...price, id: 'old-price', isActive: true }]);
+    tx.masterDataAudit.create.mockRejectedValue(new Error('Audit unavailable'));
+    await expect(prices.switchActive('admin', price.id, ['old-price'])).rejects.toThrow('Audit unavailable');
+    expect(tx.pricingConfiguration.update).toHaveBeenCalledTimes(1);
+  });
+  it('does not repeat writes when the selected configuration is already active', async () => {
+    const { prices, tx, price } = setup(); price.isActive = true;
+    await prices.switchActive('admin', price.id, []);
+    expect(tx.pricingConfiguration.update).not.toHaveBeenCalled();
+    expect(tx.masterDataAudit.create).not.toHaveBeenCalled();
+  });
   it('keeps inactive categories out of customer options and emits only catalog fields', async () => {
     const { options, tx } = setup();
     tx.vehicleType.findMany.mockResolvedValue([{ id: 'type', vehicleType: VehicleTypeName.VAN, vehicles: [{ passengerCapacity: 10 }] }] as never);

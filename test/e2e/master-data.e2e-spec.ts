@@ -15,7 +15,7 @@ describe('Master-data HTTP permissions and command contracts', () => {
   let app: INestApplication; const id = '00000000-0000-4000-8000-000000000001'; const getUser = vi.fn();
   const types = { list: vi.fn(), create: vi.fn(), update: vi.fn() };
   const packages = { findForCustomers: vi.fn(), findOneForCustomers: vi.fn(), findForStaff: vi.fn(), create: vi.fn(), update: vi.fn(), replaceStops: vi.fn(), setStatus: vi.fn() };
-  const prices = { findAll: vi.fn(), create: vi.fn(), setActive: vi.fn() };
+  const prices = { findAll: vi.fn(), create: vi.fn(), setActive: vi.fn(), switchActive: vi.fn() };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ controllers: [VehicleTypesController, TourPackagesController, PricingConfigurationsController], providers: [
       { provide: AuthService, useValue: { getUser } }, { provide: VehicleTypesService, useValue: types },
@@ -33,6 +33,7 @@ describe('Master-data HTTP permissions and command contracts', () => {
     await request(app.getHttpServer()).post('/admin/vehicle-types').set('Authorization', 'Bearer synthetic').send({ vehicleType: 'VAN' }).expect(403);
     await request(app.getHttpServer()).patch(`/admin/tour-packages/${id}`).set('Authorization', 'Bearer synthetic').send({ packageName: 'Synthetic' }).expect(403);
     await request(app.getHttpServer()).post(`/admin/pricing-configurations/${id}/activate`).set('Authorization', 'Bearer synthetic').expect(403);
+    await request(app.getHttpServer()).post(`/admin/pricing-configurations/${id}/switch`).set('Authorization', 'Bearer synthetic').send({ expectedActiveIds: [] }).expect(403);
   });
   it('blocks linked Drivers even with an Admin role', async () => {
     getUser.mockResolvedValue({ id, isDriver: true, profile: { role: UserRole.ADMIN } });
@@ -63,5 +64,14 @@ describe('Master-data HTTP permissions and command contracts', () => {
     expect(packages.findForStaff).toHaveBeenCalledWith(id);
     getUser.mockResolvedValue({ id, isDriver: true, profile: { role: UserRole.STAFF } });
     await request(app.getHttpServer()).get('/staff/tour-packages').set('Authorization', 'Bearer synthetic').expect(403);
+  });
+  it('validates pricing switch expectations and forwards only the verified actor', async () => {
+    getUser.mockResolvedValue({ id, profile: { role: UserRole.ADMIN } });
+    for (const body of [{}, { expectedActiveIds: ['invalid'] }, { expectedActiveIds: [id, id] }, { expectedActiveIds: [], actorUserId: id }]) {
+      await request(app.getHttpServer()).post(`/admin/pricing-configurations/${id}/switch`).set('Authorization', 'Bearer synthetic').send(body).expect(400);
+    }
+    expect(prices.switchActive).not.toHaveBeenCalled();
+    await request(app.getHttpServer()).post(`/admin/pricing-configurations/${id}/switch`).set('Authorization', 'Bearer synthetic').send({ expectedActiveIds: [id] }).expect(201);
+    expect(prices.switchActive).toHaveBeenCalledWith(id, id, [id]);
   });
 });

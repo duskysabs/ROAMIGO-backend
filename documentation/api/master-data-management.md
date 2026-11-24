@@ -45,6 +45,25 @@ the service check. The existing inclusive effective-period conflict policy is
 preserved. Audit/actor updates happen atomically with the status change. Direct
 database administrative writes are outside the application service guarantee.
 
+## Confirmed pricing replacement
+
+`POST /admin/pricing-configurations/:configurationId/switch` accepts
+`{ "expectedActiveIds": ["uuid-of-overlapping-active-configuration"] }`.
+Only an active, non-driver Admin can switch pricing. The target effective period
+must include the current time; future drafts remain inactive until their start.
+
+The command locks the vehicle category, checks the exact set of overlapping
+active IDs reviewed by the Admin, deactivates those rows, activates the target,
+and writes all before/after audits in one transaction. A stale confirmation
+returns 409 without changes. An audit failure rolls the entire switch back.
+Already-active targets return without repeating mutations. Non-overlapping
+periods and other vehicle categories are retained. Replaced configurations do
+not resume automatically after a replacement expires. Booked and saved quote
+snapshots are not rewritten.
+
+The existing activate endpoint still rejects overlaps. Clients should use the
+switch command only after presenting the replacement summary for confirmation.
+
 ## Immutable mutation evidence
 
 MasterDataAudit stores actorUserId, actorRole, recordType/ID, action, a server-owned

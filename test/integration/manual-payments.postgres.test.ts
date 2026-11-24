@@ -373,4 +373,27 @@ describe('Manual payments and allocation on isolated Postgres', () => {
     expect(await prisma.masterDataAudit.count({ where: { recordId: { in: [first.id, second.id] }, action: 'ACTIVATE' } })).toBe(1);
   });
 
+  it('rolls back a failed switch and permits one confirmed replacement under concurrency', async () => {
+    const prices = new PricingConfigurationsService(prisma as never);
+    const type = await prisma.vehicleType.create({ data: { vehicleType: VehicleTypeName.SUV, isActive: false } });
+    const request = { vehicleTypeId: type.id, baseRate: 1400, minAdjustmentPct: 0, maxAdjustmentPct: 0, effectiveFrom: '2000-01-01T00:00:00Z' };
+    const original = await prices.create(actorUserId, request);
+    const first = await prices.create(actorUserId, { ...request, baseRate: 1500 });
+    const second = await prices.create(actorUserId, { ...request, baseRate: 1600 });
+    await prices.setActive(actorUserId, original.id, true);
+    const failing = new PricingConfigurationsService({
+      $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) => prisma.$transaction(tx => callback(new Proxy(tx, { get(target, key) {
+        if (key === 'masterDataAudit') return { create: async () => { throw new Error('Synthetic switch audit failure'); } };
+        return Reflect.get(target, key);
+      } }))),
+    } as never);
+    await expect(failing.switchActive(actorUserId, first.id, [original.id])).rejects.toThrow('Synthetic switch audit failure');
+    expect((await prisma.pricingConfiguration.findUniqueOrThrow({ where: { id: original.id } })).isActive).toBe(true);
+    expect((await prisma.pricingConfiguration.findUniqueOrThrow({ where: { id: first.id } })).isActive).toBe(false);
+    const results = await Promise.allSettled([prices.switchActive(actorUserId, first.id, [original.id]), prices.switchActive(actorUserId, second.id, [original.id])]);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(await prisma.pricingConfiguration.count({ where: { vehicleTypeId: type.id, isActive: true } })).toBe(1);
+    expect((await prisma.pricingConfiguration.findUniqueOrThrow({ where: { id: original.id } })).isActive).toBe(false);
+    expect(await prisma.masterDataAudit.count({ where: { recordId: original.id, action: 'DEACTIVATE' } })).toBe(1);
+  });
 });
