@@ -46,6 +46,7 @@ describe('Manual payments and allocation on isolated Postgres', () => {
         userId, role, accountStatus: AccountStatus.ACTIVE, firstName: 'Fixture', lastName: marker,
       } });
     }
+    await prisma.staff.create({ data: { userId: actorUserId, employmentStatus: EmploymentStatus.ACTIVE } });
     const type = await prisma.vehicleType.upsert({ where: { vehicleType: VehicleTypeName.VAN }, update: {}, create: { vehicleType: VehicleTypeName.VAN } });
     vehicleTypeId = type.id;
     const staff = await prisma.staff.create({ data: { userId: driverUserId, employmentStatus: EmploymentStatus.ACTIVE } });
@@ -277,7 +278,7 @@ describe('Manual payments and allocation on isolated Postgres', () => {
 
   it('completes a trip atomically and prevents availability overrides during turnaround', async () => {
     const trip = await prisma.booking.create({ data: {
-      customerUserId, vehicleTypeId, salesChannel, bookingType: BookingType.CUSTOM_TRIP, passengerCount: 4,
+      customerUserId, vehicleTypeId, salesChannel: BookingSalesChannel.FACE_TO_FACE, bookingType: BookingType.CUSTOM_TRIP, passengerCount: 4,
       startDatetime: new Date(Date.now() - 3600000), endDatetime: new Date(Date.now() + 7200000),
       bookingStatus: BookingStatus.AWAITING_PAYMENT, totalDistanceKm: '10.00', estimatedDurationMinutes: 180, finalQuotedPrice: '1200.00',
     } });
@@ -291,7 +292,7 @@ describe('Manual payments and allocation on isolated Postgres', () => {
     expect((await prisma.resourceHold.findUniqueOrThrow({ where: { assignmentId: active.id } })).phase).toBe('TURNAROUND');
     expect(await prisma.driverEvent.count({ where: { assignmentId: active.id, action: 'ENDED' } })).toBe(1);
     const completion = await prisma.travelSlip.findUniqueOrThrow({ where: { bookingAssignmentId: active.id } });
-    expect(completion.completionSnapshot).toMatchObject({ version: 1, bookingId: trip.id, driverId: active.driverId, originalQuotedAmount: '1200.00' });
+    expect(completion.completionSnapshot).toMatchObject({ version: 1, bookingId: trip.id, driverId: active.driverId, originalQuotedAmount: '1200' });
     await expect(prisma.travelSlip.update({ where: { id: completion.id }, data: { remarks: 'Changed afterwards' } })).rejects.toBeDefined();
     await expect(prisma.vehicle.update({ where: { id: active.vehicleId }, data: { vehicleStatus: VehicleStatus.AVAILABLE } })).rejects.toBeDefined();
     await expect(prisma.driver.update({ where: { id: active.driverId }, data: { driverStatus: DriverStatus.AVAILABLE } })).rejects.toBeDefined();

@@ -3,7 +3,8 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { AccountStatus, EmploymentStatus, UserRole } from '../generated/prisma/enums.js';
 
 export async function requireStaffOperator(tx: Prisma.TransactionClient, actorUserId: string) {
-  await tx.$queryRaw`SELECT user_id FROM public.user_profile WHERE user_id = ${actorUserId}::uuid FOR UPDATE`;
+  // Freeze authorization fields without blocking foreign-key references from allocation audits.
+  await tx.$queryRaw`SELECT user_id FROM public.user_profile WHERE user_id = ${actorUserId}::uuid FOR NO KEY UPDATE`;
   await tx.$queryRaw`SELECT staff_id FROM public.staff WHERE user_id = ${actorUserId}::uuid FOR UPDATE`;
   const actor = await tx.userProfile.findUnique({
     where: { userId: actorUserId }, include: { staff: { include: { driver: true } } },

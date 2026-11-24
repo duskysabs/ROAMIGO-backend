@@ -2,16 +2,23 @@
 
 ## Current evidence
 
-November 24 update: the user supplied successful 46-test unit and 23-case HTTP
+November 24 local database rehearsal: all nine committed migrations applied to
+a fresh PostgreSQL 17 container, and all 19 PostgreSQL integration cases passed
+after the payment-approval profile lock and fixture corrections on
+`codex/payment-approval-deadlock`. This covers immutable master-data evidence,
+audit rollback, historical booking snapshots, competing pricing activation,
+payment approval, allocation and trip completion. A pg client concurrent-query
+deprecation warning remains. This is local evidence, not hosted deployment proof.
+
+Earlier November 24 update: the user supplied successful 46-test unit and 23-case HTTP
 results for booking-channel/unpaid cancellation, plus clean lint/build. Geoapify
 hardening subsequently passed 33 unit and 14 HTTP cases, lint and build. These
-are user-run focused results, not a disposable-database pass. The complete
-migration-chain and Postgres race/rollback rehearsal remain unexecuted here.
+are user-run focused results, separate from the local database rehearsal above.
 
 The #22 master-data branch adds 202611240001_master_data_audit after
 202611200001_booking_sales_channel. Its new package-audit rollback/immutability,
-catalog visibility, historical route and pricing activation race cases are
-authored but not run. Generate its client before the fresh-database rehearsal.
+catalog visibility, historical route and pricing activation race cases passed
+in the local rehearsal. Generate its client before a fresh-database rehearsal.
 The existing bootstrap/migrate/test commands below apply the complete committed
 chain to the explicitly selected disposable target. They must not target the
 hosted application database. No database environment values are bundled.
