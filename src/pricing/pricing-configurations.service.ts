@@ -48,4 +48,37 @@ export class PricingConfigurationsService {
       return result;
     }, { timeout: 15_000 });
   }
+
+  async switchActive(adminUserId: string, id: string, expectedActiveIds: string[]) {
+    return this.prisma.$transaction(async tx => {
+      await requireMasterDataAdmin(tx, adminUserId);
+      const initial = await tx.pricingConfiguration.findUnique({ where: { id }, select: { vehicleTypeId: true } });
+      if (!initial) throw new NotFoundException('Pricing configuration not found');
+      await tx.$queryRaw`SELECT vehicle_type_id FROM public.vehicle_type WHERE vehicle_type_id = ${initial.vehicleTypeId}::uuid FOR UPDATE`;
+      const selected = await tx.pricingConfiguration.findUnique({ where: { id } });
+      if (!selected) throw new NotFoundException('Pricing configuration not found');
+      // A replay must not retire configurations activated after the original switch.
+      if (selected.isActive) return selected;
+      const now = new Date();
+      if (selected.effectiveFrom > now || (selected.effectiveUntil && selected.effectiveUntil < now)) {
+        throw new BadRequestException('Switching requires a configuration whose effective period includes today. Future configurations can remain saved until their start date.');
+      }
+      const overlapping = await tx.pricingConfiguration.findMany({ where: {
+        id: { not: id }, vehicleTypeId: selected.vehicleTypeId, isActive: true,
+        effectiveFrom: { lte: selected.effectiveUntil ?? new Date('9999-12-31') },
+        OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: selected.effectiveFrom } }],
+      }, orderBy: { id: 'asc' } });
+      const actualIds = overlapping.map(row => row.id).sort();
+      if (JSON.stringify(actualIds) !== JSON.stringify([...expectedActiveIds].sort())) {
+        throw new ConflictException('Active pricing changed. Refresh the configurations and review the switch again.');
+      }
+      for (const before of overlapping) {
+        const after = await tx.pricingConfiguration.update({ where: { id: before.id }, data: { isActive: false, updatedByAdminId: adminUserId } });
+        await auditMasterData(tx, adminUserId, 'PRICING_CONFIGURATION', before.id, 'DEACTIVATE', before, after);
+      }
+      const result = await tx.pricingConfiguration.update({ where: { id }, data: { isActive: true, updatedByAdminId: adminUserId } });
+      await auditMasterData(tx, adminUserId, 'PRICING_CONFIGURATION', id, 'ACTIVATE', selected, result);
+      return result;
+    }, { timeout: 15_000 });
+  }
 }

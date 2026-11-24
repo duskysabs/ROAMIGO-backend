@@ -2,6 +2,16 @@
 
 ## Current evidence
 
+November 24 pricing-switch follow-up: all nine migrations applied to the fresh
+local `roamigo_pricing_switch_test` database and all 20 integration cases passed,
+including rollback when switch audit insertion fails and one winner under
+concurrent replacement. The user also supplied passing 12-test unit, nine-case
+HTTP, lint and build results. Through the local frontend/backend connected to
+the approved non-production database, confirmation switched synthetic VAN
+pricing from PHP 1200 to PHP 1300 and then restored PHP 1200. Active/history
+tables refreshed, both switch audit pairs persisted, and hashes of stored
+booking/quote amounts were unchanged. The PHP 1300 fixture remains inactive.
+
 November 24 local database rehearsal: all nine committed migrations applied to
 a fresh PostgreSQL 17 container, and all 19 PostgreSQL integration cases passed
 after the payment-approval profile lock and fixture corrections on
