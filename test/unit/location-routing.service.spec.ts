@@ -63,7 +63,7 @@ describe('location and routing services', () => {
   });
 
   it('does not price or persist a Custom Trip quote after route-provider failure', async () => {
-    const prisma = { vehicleType: { findUnique: vi.fn().mockResolvedValue({ id: 'van' }) }, bookingQuote: { create: vi.fn() } };
+    const prisma = { vehicleType: { findUnique: vi.fn().mockResolvedValue({ id: 'van', isActive: true }) }, bookingQuote: { create: vi.fn() } };
     const pricing = { quote: vi.fn() };
     const routing = { preview: vi.fn().mockRejectedValue(new Error('Synthetic route failure')) };
     const service = new BookingsService(prisma as never, pricing as never, routing as never);

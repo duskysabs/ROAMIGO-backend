@@ -9323,6 +9323,108 @@
               }
             }
           }
+        },
+        {
+          "name": "Missing auth: GET /admin/vehicle-types",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401',()=>pm.expect(pm.response.code).to.eql(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test."
+          }
+        },
+        {
+          "name": "Missing auth: POST /admin/vehicle-types",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401',()=>pm.expect(pm.response.code).to.eql(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleType\": \"VAN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Missing auth: PATCH /admin/vehicle-types/{{managedVehicleTypeId}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401',()=>pm.expect(pm.response.code).to.eql(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types/{{managedVehicleTypeId}}",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -10177,6 +10279,223 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"Synthetic unpaid cancellation; no real funds\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Master-data category lifecycle",
+      "description": "Choose an absent enum category on a disposable database; duplicate creation intentionally returns 409. Do not deactivate real fleet categories. This does not expose audit records.",
+      "item": [
+        {
+          "name": "List all vehicle categories",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const missing=['baseUrl','adminToken'].filter(k=>!String(pm.environment.get(k)||'').trim());if(missing.length){console.info('SKIPPED: '+missing.join(', '));pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.expect(pm.response.code).to.eql(200));",
+                  "if(pm.response.code===200)pm.test('Management list',()=>pm.expect(pm.response.json()).to.be.an('array')); "
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test."
+          }
+        },
+        {
+          "name": "Create supported inactive category",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const missing=['baseUrl','adminToken'].filter(k=>!String(pm.environment.get(k)||'').trim());if(missing.length){console.info('SKIPPED: '+missing.join(', '));pm.execution.skipRequest();}",
+                  "if(pm.environment.get('runWrites')!=='true'||pm.environment.get('scenario')!=='masterData'){console.info('SKIPPED: opt into masterData writes');pm.execution.skipRequest();}",
+                  "if(!pm.environment.get('managedVehicleCategory')){console.info('SKIPPED: choose an absent supported category');pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201',()=>pm.expect(pm.response.code).to.eql(201));",
+                  "if(pm.response.code===201){const j=pm.response.json();pm.test('Created inactive',()=>pm.expect(j.isActive).to.eql(false));pm.environment.set('managedVehicleTypeId',j.id);}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleType\": \"{{managedVehicleCategory}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Activate disposable category",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const missing=['baseUrl','adminToken'].filter(k=>!String(pm.environment.get(k)||'').trim());if(missing.length){console.info('SKIPPED: '+missing.join(', '));pm.execution.skipRequest();}",
+                  "if(pm.environment.get('runWrites')!=='true'||pm.environment.get('scenario')!=='masterData'){console.info('SKIPPED: opt into masterData writes');pm.execution.skipRequest();}",
+                  "if(!pm.environment.get('managedVehicleTypeId')){console.info('SKIPPED: provide a disposable managedVehicleTypeId');pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.expect(pm.response.code).to.eql(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types/{{managedVehicleTypeId}}",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Deactivate disposable category",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const missing=['baseUrl','adminToken'].filter(k=>!String(pm.environment.get(k)||'').trim());if(missing.length){console.info('SKIPPED: '+missing.join(', '));pm.execution.skipRequest();}",
+                  "if(pm.environment.get('runWrites')!=='true'||pm.environment.get('scenario')!=='masterData'){console.info('SKIPPED: opt into masterData writes');pm.execution.skipRequest();}",
+                  "if(!pm.environment.get('managedVehicleTypeId')){console.info('SKIPPED: provide a disposable managedVehicleTypeId');pm.execution.skipRequest();}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200',()=>pm.expect(pm.response.code).to.eql(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/vehicle-types/{{managedVehicleTypeId}}",
+            "description": "Only synthetic master data. Lifecycle writes require runWrites=true and scenario=masterData. Missing prerequisites are skipped, not passed. Never deactivate an operational category as a test.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
               "options": {
                 "raw": {
                   "language": "json"

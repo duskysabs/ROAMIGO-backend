@@ -16,7 +16,7 @@ leave login credentials blank; the identity requests capture the user IDs.
 Never commit populated environments or tokens. These exports contain no secrets
 and do not import the backend `.env` file.
 
-The suite contains 73 current endpoints, 168 request templates and 64 individual
+The suite contains 76 current endpoints, 175 request templates and 67 individual
 missing-auth checks. [The coverage inventory](all-endpoints-coverage.md) maps each
 endpoint to its controller and request folder. Assertions check exact HTTP codes,
 response shapes, ownership, payment states and Driver transitions. This is
@@ -185,3 +185,16 @@ This does not refund pending receipt evidence or cancel a remote checkout.
 Folder 15 adds Staff denial; folder 14 adds missing-auth coverage. Default
 writes remain disabled. Test paid/assigned denial and concurrent approval using
 the dedicated service/HTTP/isolated-Postgres suites, not a real-money booking.
+
+
+## Master-data extension (#22)
+
+Folder 17 lists Admin vehicle categories and provides explicitly opted-in
+creation/activation/deactivation of a disposable supported category. Set
+scenario=masterData and runWrites=true only on isolated data. Choose an absent
+supported enum value for managedVehicleCategory; do not recreate or deactivate
+an operational category. Creation captures managedVehicleTypeId. Three new
+missing-auth templates cover those routes. All package/pricing/category writes
+now record atomic audit snapshots; no public audit reader is provided. Existing
+successful request bodies remain compatible. Apply the reviewed audit migration
+before running the updated backend. No new Postman requests were executed here.

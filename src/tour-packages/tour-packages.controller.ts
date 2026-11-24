@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Req } from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import type { AuthenticatedRequest } from '../auth/guards/supabase-auth.guard.js';
 import { PackageStatus, UserRole } from '../generated/prisma/enums.js';
@@ -15,11 +15,11 @@ export class TourPackagesController {
   findForCustomers() { return this.tourPackagesService.findForCustomers(); }
 
   @Get('tour-packages/:tourPackageId')
-  findOneForCustomers(@Param('tourPackageId') id: string) { return this.tourPackagesService.findOneForCustomers(id); }
+  findOneForCustomers(@Param('tourPackageId', ParseUUIDPipe) id: string) { return this.tourPackagesService.findOneForCustomers(id); }
 
   @Get('staff/tour-packages')
   @Roles(UserRole.ADMIN, UserRole.STAFF)
-  findForStaff() { return this.tourPackagesService.findForStaff(); }
+  findForStaff(@Req() request: AuthenticatedRequest) { return this.tourPackagesService.findForStaff(request.user!.id); }
 
   @Post('admin/tour-packages')
   @Roles(UserRole.ADMIN)
@@ -29,21 +29,21 @@ export class TourPackagesController {
 
   @Patch('admin/tour-packages/:tourPackageId')
   @Roles(UserRole.ADMIN)
-  update(@Param('tourPackageId') id: string, @Body() dto: UpdateTourPackageDto) {
-    return this.tourPackagesService.update(id, dto);
+  update(@Req() request: AuthenticatedRequest, @Param('tourPackageId', ParseUUIDPipe) id: string, @Body() dto: UpdateTourPackageDto) {
+    return this.tourPackagesService.update(request.user!.id, id, dto);
   }
 
   @Put('admin/tour-packages/:tourPackageId/stops')
   @Roles(UserRole.ADMIN)
-  replaceStops(@Param('tourPackageId') id: string, @Body() dto: ReplaceTourPackageStopsDto) {
-    return this.tourPackagesService.replaceStops(id, dto);
+  replaceStops(@Req() request: AuthenticatedRequest, @Param('tourPackageId', ParseUUIDPipe) id: string, @Body() dto: ReplaceTourPackageStopsDto) {
+    return this.tourPackagesService.replaceStops(request.user!.id, id, dto);
   }
 
   @Post('admin/tour-packages/:tourPackageId/activate')
   @Roles(UserRole.ADMIN)
-  activate(@Param('tourPackageId') id: string) { return this.tourPackagesService.setStatus(id, PackageStatus.ACTIVE); }
+  activate(@Req() request: AuthenticatedRequest, @Param('tourPackageId', ParseUUIDPipe) id: string) { return this.tourPackagesService.setStatus(request.user!.id, id, PackageStatus.ACTIVE); }
 
   @Post('admin/tour-packages/:tourPackageId/deactivate')
   @Roles(UserRole.ADMIN)
-  deactivate(@Param('tourPackageId') id: string) { return this.tourPackagesService.setStatus(id, PackageStatus.INACTIVE); }
+  deactivate(@Req() request: AuthenticatedRequest, @Param('tourPackageId', ParseUUIDPipe) id: string) { return this.tourPackagesService.setStatus(request.user!.id, id, PackageStatus.INACTIVE); }
 }

@@ -9,7 +9,7 @@ export class BookingOptionsService {
   // records, Driver details, or operational status through booking options.
   async vehicleTypes() {
     const vehicleTypes = await this.prisma.vehicleType.findMany({
-      where: { vehicles: { some: { isDeleted: false } } },
+      where: { isActive: true, vehicles: { some: { isDeleted: false } } },
       select: { id: true, vehicleType: true, vehicles: { where: { isDeleted: false }, select: { passengerCapacity: true } } },
       orderBy: { vehicleType: 'asc' },
     });

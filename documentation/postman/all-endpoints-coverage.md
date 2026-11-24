@@ -102,3 +102,12 @@ POST /bookings/:bookingId/cancel is covered by folder 16 owner/replay requests,
 folder 15 Staff denial and folder 14 missing-auth. Authored collection totals:
 73 endpoints, 168 templates and 64 missing-auth cases. No new collection requests
 were executed during implementation. See ../api/unpaid-cancellation.md.
+
+
+### Master-data extension (#22)
+
+GET/POST /admin/vehicle-types and PATCH /admin/vehicle-types/:vehicleTypeId are
+covered by folder 17 and missing-auth folder 14. Authored totals are 76 endpoints,
+175 templates and 67 missing-auth cases. Package/pricing mutation bodies are
+unchanged; actor identity and immutable audit evidence are now service-owned.
+These are authored templates, not runtime passes.
