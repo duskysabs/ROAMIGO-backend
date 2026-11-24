@@ -2,7 +2,21 @@
 
 ## Current evidence
 
-Source and diffs were reviewed. Tests, formatter, lint, type checks, build,
+November 24 update: the user supplied successful 46-test unit and 23-case HTTP
+results for booking-channel/unpaid cancellation, plus clean lint/build. Geoapify
+hardening subsequently passed 33 unit and 14 HTTP cases, lint and build. These
+are user-run focused results, not a disposable-database pass. The complete
+migration-chain and Postgres race/rollback rehearsal remain unexecuted here.
+
+The #22 master-data branch adds 202611240001_master_data_audit after
+202611200001_booking_sales_channel. Its new package-audit rollback/immutability,
+catalog visibility, historical route and pricing activation race cases are
+authored but not run. Generate its client before the fresh-database rehearsal.
+The existing bootstrap/migrate/test commands below apply the complete committed
+chain to the explicitly selected disposable target. They must not target the
+hosted application database. No database environment values are bundled.
+
+Historical November 8 evidence: source and diffs were reviewed. Tests, formatter, lint, type checks, build,
 database setup and migrations were not run for the November 8 changes.
 The commands here are for the user to run. No live PayMongo call is needed.
 

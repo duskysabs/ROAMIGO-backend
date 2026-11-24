@@ -511,7 +511,7 @@ export class BookingsService {
       where: { id: dto.vehicleTypeId },
     });
 
-    if (!vehicleType) {
+    if (!vehicleType || !vehicleType.isActive) {
       throw new BadRequestException('Selected vehicle type was not found');
     }
 

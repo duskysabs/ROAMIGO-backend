@@ -292,6 +292,7 @@ model UserProfile {
   notifications Notification[]
   bookingQuotes BookingQuote[] @relation("CustomerBookingQuotes")
   operatorBookingQuotes BookingQuote[] @relation("OperatorBookingQuotes")
+  masterDataAudits MasterDataAudit[]
   bookingTransitions BookingTransition[]
   paymentAudits PaymentAudit[]
   assignmentRequests AssignmentRequest[]
@@ -351,6 +352,7 @@ model Driver {
 model VehicleType {
   id                    String          @id @default(uuid()) @db.Uuid @map("vehicle_type_id")
   vehicleType           VehicleTypeName @unique @map("vehicle_type")
+  isActive              Boolean         @default(true) @map("is_active")
 
   vehicles              Vehicle[]
   bookings              Booking[]
@@ -359,6 +361,24 @@ model VehicleType {
   bookingQuotes        BookingQuote[]
 
   @@map("vehicle_type")
+  @@schema("public")
+}
+
+model MasterDataAudit {
+  id          String   @id @default(uuid()) @db.Uuid @map("master_data_audit_id")
+  actorUserId String   @db.Uuid @map("actor_user_id")
+  actorRole   UserRole @map("actor_role")
+  recordType  String   @db.VarChar(40) @map("record_type")
+  recordId    String   @db.Uuid @map("record_id")
+  action      String   @db.VarChar(40)
+  reason      String   @db.VarChar(500)
+  before      Json?    @db.JsonB
+  after       Json     @db.JsonB
+  occurredAt  DateTime @default(now()) @db.Timestamptz(3) @map("occurred_at")
+  actor       UserProfile @relation(fields: [actorUserId], references: [userId], onDelete: Restrict)
+
+  @@index([recordType, recordId, occurredAt])
+  @@map("master_data_audit")
   @@schema("public")
 }
 

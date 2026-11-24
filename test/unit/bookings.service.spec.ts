@@ -194,7 +194,7 @@ describe('BookingsService', () => {
   });
 
   it('issues a Custom Trip quote from server-resolved route evidence', async () => {
-    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id' });
+    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id', isActive: true });
     findCapacityMatch.mockResolvedValue({ id: 'vehicle-id' });
     previewRoute.mockResolvedValue({
       provider: 'geoapify',
@@ -282,7 +282,7 @@ describe('BookingsService', () => {
   });
 
   it('prices and creates a valid custom-trip booking with ordered stops', async () => {
-    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id' });
+    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id', isActive: true });
     findCapacityMatch.mockResolvedValue({ id: 'vehicle-id' });
     quote.mockResolvedValue({
       totalDistanceKm: '25.50',
@@ -334,7 +334,7 @@ describe('BookingsService', () => {
   });
 
   it('uses the approved Tour Package route instead of customer-supplied stops', async () => {
-    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id' });
+    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id', isActive: true });
     findCapacityMatch.mockResolvedValue({ id: 'vehicle-id' });
     findTourPackage.mockResolvedValue({
       id: 'package-id',
@@ -400,7 +400,7 @@ describe('BookingsService', () => {
   });
 
   it('rejects an inactive Tour Package before pricing or persistence', async () => {
-    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id' });
+    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id', isActive: true });
     findCapacityMatch.mockResolvedValue({ id: 'vehicle-id' });
     findTourPackage.mockResolvedValue({
       packageStatus: PackageStatus.INACTIVE,
@@ -422,7 +422,7 @@ describe('BookingsService', () => {
   });
 
   it('rejects a request when no eligible vehicle-driver pair is available', async () => {
-    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id' });
+    findVehicleType.mockResolvedValue({ id: 'vehicle-type-id', isActive: true });
     findCapacityMatch.mockResolvedValue(null);
 
     await expect(

@@ -3,11 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Client } from 'pg';
 import { PrismaClient, type Prisma } from '../../src/generated/prisma/client.js';
-import { AccountStatus, AssignmentStatus, BookingSalesChannel, BookingStatus, BookingType, DriverStatus, EmploymentStatus, FuelType, PaymentChannel, PaymentMethod, PaymentStatus, UserRole, VehicleStatus, VehicleTypeName } from '../../src/generated/prisma/enums.js';
+import { AccountStatus, AssignmentStatus, BookingSalesChannel, BookingStatus, BookingType, DriverStatus, EmploymentStatus, FuelType, PackageStatus, PaymentChannel, PaymentMethod, PaymentStatus, StopType, UserRole, VehicleStatus, VehicleTypeName } from '../../src/generated/prisma/enums.js';
 import { AssignmentsService } from '../../src/assignments/assignments.service.js';
 import { PaymentsService } from '../../src/payments/payments.service.js';
 import { UnpaidCancellationsService } from '../../src/bookings/unpaid-cancellations.service.js';
 import { BookingsService } from '../../src/bookings/bookings.service.js';
+import { TourPackagesService } from '../../src/tour-packages/tour-packages.service.js';
+import { VehicleTypesService } from '../../src/vehicle-types/vehicle-types.service.js';
+import { PricingConfigurationsService } from '../../src/pricing/pricing-configurations.service.js';
+import { BookingOptionsService } from '../../src/booking-options/booking-options.service.js';
 import { DriverService } from '../../src/driver/driver.service.js';
 
 const connectionString = process.env.ROAMIGO_TEST_DATABASE_URL;
@@ -305,4 +309,67 @@ describe('Manual payments and allocation on isolated Postgres', () => {
       await client.end();
     }
   });
+  it('persists immutable package audit evidence without rewriting a booked route snapshot', async () => {
+    const packages = new TourPackagesService(prisma as never);
+    const stops = [
+      { stopType: StopType.PICKUP, locationName: 'Original pickup', formattedAddress: 'Synthetic A', activity: 'Meet', latitude: 10.3, longitude: 123.9, defaultStopMinutes: 0 },
+      { stopType: StopType.DROPOFF, locationName: 'Original dropoff', formattedAddress: 'Synthetic B', activity: 'End', latitude: 10.4, longitude: 123.9, defaultStopMinutes: 0 },
+    ];
+    const tour = await packages.create(actorUserId, { packageName: 'Audit fixture', description: 'Synthetic only', basePrice: 100, estimatedDurationMinutes: 120, stops });
+    await packages.setStatus(actorUserId, tour.id, PackageStatus.ACTIVE);
+    const trip = await booking(27);
+    await prisma.booking.update({ where: { id: trip.id }, data: { tourPackageId: tour.id, stops: { create: stops.map((stop, index) => ({
+      stopType: stop.stopType, locationName: stop.locationName, formattedAddress: stop.formattedAddress, latitude: stop.latitude, longitude: stop.longitude, sequenceNumber: index + 1,
+    })) } } });
+    await packages.replaceStops(actorUserId, tour.id, { stops: stops.map(stop => ({ ...stop, locationName: 'Revised '+stop.locationName })) });
+    await packages.setStatus(actorUserId, tour.id, PackageStatus.INACTIVE);
+    expect(await packages.findForCustomers()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: tour.id })]));
+    expect((await prisma.bookingStop.findMany({ where: { bookingId: trip.id }, orderBy: { sequenceNumber: 'asc' } })).map(stop => stop.locationName)).toEqual(['Original pickup', 'Original dropoff']);
+    const audit = await prisma.masterDataAudit.findFirstOrThrow({ where: { recordId: tour.id, action: 'REPLACE_STOPS' } });
+    expect(audit.actorUserId).toBe(actorUserId);
+    expect(audit.before).toMatchObject({ stops: expect.arrayContaining([expect.objectContaining({ locationName: 'Original pickup' })]) });
+    expect(audit.after).toMatchObject({ stops: expect.arrayContaining([expect.objectContaining({ locationName: 'Revised Original pickup' })]) });
+    await expect(prisma.masterDataAudit.update({ where: { id: audit.id }, data: { reason: 'Tampered' } })).rejects.toBeDefined();
+    await expect(prisma.masterDataAudit.delete({ where: { id: audit.id } })).rejects.toBeDefined();
+  });
+
+  it('rolls a package edit back if its audit insert fails', async () => {
+    const packages = new TourPackagesService(prisma as never);
+    const tour = await packages.create(actorUserId, { packageName: 'Rollback original', description: 'Synthetic', basePrice: 1, estimatedDurationMinutes: 1, stops: [
+      { stopType: StopType.PICKUP, locationName: 'A', formattedAddress: 'A', activity: 'Meet', latitude: 10.3, longitude: 123.9, defaultStopMinutes: 0 },
+      { stopType: StopType.DROPOFF, locationName: 'B', formattedAddress: 'B', activity: 'End', latitude: 10.4, longitude: 123.9, defaultStopMinutes: 0 },
+    ] });
+    const failing = new TourPackagesService({ $transaction: (work: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      prisma.$transaction(tx => work(new Proxy(tx, { get(target, key) {
+        if (key === 'masterDataAudit') return { create: async () => { throw new Error('Synthetic audit failure'); } };
+        return Reflect.get(target, key);
+      } }))),
+    } as never);
+    await expect(failing.update(actorUserId, tour.id, { packageName: 'Should roll back' })).rejects.toThrow('Synthetic audit failure');
+    expect((await prisma.tourPackage.findUniqueOrThrow({ where: { id: tour.id } })).packageName).toBe('Rollback original');
+    expect(await prisma.masterDataAudit.count({ where: { recordId: tour.id } })).toBe(1);
+  });
+
+  it('audits category visibility changes without mutating existing booking identity', async () => {
+    const types = new VehicleTypesService(prisma as never);
+    const before = await prisma.booking.findFirstOrThrow({ where: { vehicleTypeId } });
+    await types.update(actorUserId, vehicleTypeId, { isActive: false });
+    expect(await new BookingOptionsService(prisma as never).vehicleTypes()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: vehicleTypeId })]));
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: before.id } })).vehicleTypeId).toBe(vehicleTypeId);
+    await types.update(actorUserId, vehicleTypeId, { isActive: true });
+    expect(await prisma.masterDataAudit.count({ where: { recordId: vehicleTypeId, recordType: 'VEHICLE_TYPE' } })).toBe(2);
+  });
+
+  it('permits one winner when overlapping pricing rows are activated concurrently', async () => {
+    const prices = new PricingConfigurationsService(prisma as never);
+    const isolatedType = await prisma.vehicleType.create({ data: { vehicleType: VehicleTypeName.MINIBUS, isActive: false } });
+    const request = { vehicleTypeId: isolatedType.id, baseRate: 1200, minAdjustmentPct: 0, maxAdjustmentPct: 0, effectiveFrom: '2199-01-01T00:00:00Z' };
+    const first = await prices.create(actorUserId, request);
+    const second = await prices.create(actorUserId, request);
+    const results = await Promise.allSettled([prices.setActive(actorUserId, first.id, true), prices.setActive(actorUserId, second.id, true)]);
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(await prisma.pricingConfiguration.count({ where: { id: { in: [first.id, second.id] }, isActive: true } })).toBe(1);
+    expect(await prisma.masterDataAudit.count({ where: { recordId: { in: [first.id, second.id] }, action: 'ACTIVATE' } })).toBe(1);
+  });
+
 });

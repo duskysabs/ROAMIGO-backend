@@ -1,4 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '../generated/prisma/client.js';
+import { auditMasterData, requireMasterDataAdmin } from '../common/master-data-audit.js';
+import { requireStaffOperator } from '../common/staff-operator.js';
 import { PackageStatus, StopType } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateTourPackageDto } from './dto/create-tour-package.dto.js';
@@ -13,59 +16,62 @@ export class TourPackagesService {
   // booking snapshot. Bookings copy their route at submission time.
   create(adminUserId: string, dto: CreateTourPackageDto) {
     this.validateStops(dto.stops);
-    return this.prisma.tourPackage.create({
-      data: {
-        packageName: dto.packageName,
-        description: dto.description,
-        basePrice: dto.basePrice,
-        estimatedDurationMinutes: dto.estimatedDurationMinutes,
-        packageStatus: PackageStatus.INACTIVE,
-        createdByAdmin: { connect: { userId: adminUserId } },
-        stops: { create: dto.stops.map((stop, index) => ({ ...stop, sequenceNumber: index + 1 })) },
-      },
-      include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
-    });
-  }
-
-  async update(id: string, dto: UpdateTourPackageDto) {
-    await this.ensureExists(id);
-    return this.prisma.tourPackage.update({
-      where: { id },
-      data: dto,
-      include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
-    });
-  }
-
-  async replaceStops(id: string, dto: ReplaceTourPackageStopsDto) {
-    this.validateStops(dto.stops);
-    await this.ensureExists(id);
-    // delete-and-recreate runs in one transaction, so callers never observe a
-    // partially reordered route.
-    return this.prisma.$transaction(async (tx) => {
-      await tx.packageStop.deleteMany({ where: { tourPackageId: id } });
-      return tx.tourPackage.update({
-        where: { id },
+    return this.prisma.$transaction(async tx => {
+      await requireMasterDataAdmin(tx, adminUserId);
+      const result = await tx.tourPackage.create({
         data: {
+          packageName: dto.packageName, description: dto.description, basePrice: dto.basePrice,
+          estimatedDurationMinutes: dto.estimatedDurationMinutes, packageStatus: PackageStatus.INACTIVE,
+          createdByAdmin: { connect: { userId: adminUserId } },
           stops: { create: dto.stops.map((stop, index) => ({ ...stop, sequenceNumber: index + 1 })) },
-        },
-        include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
+        }, include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
       });
+      await auditMasterData(tx, adminUserId, 'TOUR_PACKAGE', result.id, 'CREATE', null, result);
+      return result;
+    }, { timeout: 15_000 });
+  }
+
+  update(adminUserId: string, id: string, dto: UpdateTourPackageDto) {
+    return this.mutate(adminUserId, id, 'UPDATE', tx => tx.tourPackage.update({
+      where: { id }, data: dto, include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
+    }));
+  }
+
+  replaceStops(adminUserId: string, id: string, dto: ReplaceTourPackageStopsDto) {
+    this.validateStops(dto.stops);
+    return this.mutate(adminUserId, id, 'REPLACE_STOPS', async tx => {
+      await tx.packageStop.deleteMany({ where: { tourPackageId: id } });
+      return tx.tourPackage.update({ where: { id }, data: {
+        stops: { create: dto.stops.map((stop, index) => ({ ...stop, sequenceNumber: index + 1 })) },
+      }, include: { stops: { orderBy: { sequenceNumber: 'asc' } } } });
     });
   }
 
-  async setStatus(id: string, packageStatus: PackageStatus) {
-    await this.ensureExists(id);
-    return this.prisma.tourPackage.update({
-      where: { id },
-      data: { packageStatus },
-      include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
+  setStatus(adminUserId: string, id: string, packageStatus: PackageStatus) {
+    return this.mutate(adminUserId, id, packageStatus === PackageStatus.ACTIVE ? 'ACTIVATE' : 'DEACTIVATE', async (tx, before) => {
+      if (packageStatus === PackageStatus.ACTIVE) this.validateStops(before.stops);
+      if (before.packageStatus === packageStatus) return before;
+      return tx.tourPackage.update({ where: { id }, data: { packageStatus }, include: { stops: { orderBy: { sequenceNumber: 'asc' } } } });
     });
   }
 
-  findForStaff() {
-    return this.prisma.tourPackage.findMany({
-      include: { stops: { orderBy: { sequenceNumber: 'asc' } } },
-      orderBy: { updatedAt: 'desc' },
+  private mutate(adminUserId: string, id: string, action: string,
+    write: (tx: Prisma.TransactionClient, before: Prisma.TourPackageGetPayload<{ include: { stops: true } }>) => Promise<Prisma.TourPackageGetPayload<{ include: { stops: true } }>>) {
+    return this.prisma.$transaction(async tx => {
+      await requireMasterDataAdmin(tx, adminUserId);
+      await tx.$queryRaw`SELECT tour_package_id FROM public.tour_package WHERE tour_package_id = ${id}::uuid FOR UPDATE`;
+      const before = await tx.tourPackage.findUnique({ where: { id }, include: { stops: { orderBy: { sequenceNumber: 'asc' } } } });
+      if (!before) throw new NotFoundException('Tour package not found');
+      const result = await write(tx, before);
+      if (result !== before) await auditMasterData(tx, adminUserId, 'TOUR_PACKAGE', id, action, before, result);
+      return result;
+    }, { timeout: 15_000 });
+  }
+
+  findForStaff(actorUserId: string) {
+    return this.prisma.$transaction(async tx => {
+      await requireStaffOperator(tx, actorUserId);
+      return tx.tourPackage.findMany({ include: { stops: { orderBy: { sequenceNumber: 'asc' } } }, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }] });
     });
   }
 
@@ -83,12 +89,8 @@ export class TourPackagesService {
     return this.toCustomerPackage(tourPackage);
   }
 
-  private async ensureExists(id: string) {
-    const tourPackage = await this.prisma.tourPackage.findUnique({ where: { id }, select: { id: true } });
-    if (!tourPackage) throw new NotFoundException('Tour package not found');
-  }
-
-  private validateStops(stops: ReplaceTourPackageStopsDto['stops']) {
+  private validateStops(stops: ReadonlyArray<{ stopType: StopType }>) {
+    if (stops.length < 2 || stops.length > 30) throw new BadRequestException('Use 2 to 30 package stops');
     if (stops[0]?.stopType !== StopType.PICKUP || stops.at(-1)?.stopType !== StopType.DROPOFF) {
       throw new BadRequestException('A package route must begin with a pickup and end with a dropoff');
     }
